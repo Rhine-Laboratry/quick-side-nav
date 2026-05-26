@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Quick Side Nav",
+  "version": "1.0.0",
+  "description": "通常Webページ上のマウスサイドボタンで登録URLへ移動します。",
+  "action": {
+    "default_title": "Quick Side Nav",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html",
+  "permissions": [
+    "storage"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
+}
