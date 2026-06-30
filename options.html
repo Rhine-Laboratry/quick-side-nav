@@ -10,7 +10,7 @@
     <main class="page">
       <h1>Quick Side Nav 設定</h1>
       <p class="description">
-        通常Webページ上でマウスのサイドボタンを押すと、この拡張機能が現在のタブを下記URLへ移動します。
+        通常Webページ上でサイドボタンまたは設定したキーを押すと、この拡張機能が現在のタブを下記URLへ移動します。
         Chrome内部ページやアドレスバー上では動作しません。
       </p>
 
@@ -20,6 +20,28 @@
           <input id="targetUrl" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://chatgpt.com/">
         </label>
 
+        <fieldset class="fieldGroup">
+          <legend>起動方法</legend>
+          <label class="radioRow">
+            <input id="triggerMouse" type="radio" name="triggerType" value="mouse">
+            <span>サイドボタン</span>
+          </label>
+          <label class="radioRow">
+            <input id="triggerKey" type="radio" name="triggerType" value="key">
+            <span>キー</span>
+          </label>
+        </fieldset>
+
+        <div id="keySettings" class="keySettings">
+          <span class="label">起動キー</span>
+          <div class="keyCapture">
+            <output id="triggerKeyDisplay" class="keyDisplay">未設定</output>
+            <button id="captureKeyButton" class="secondaryButton" type="button">キーを記録</button>
+            <button id="clearKeyButton" class="secondaryButton" type="button">解除</button>
+          </div>
+          <p class="hint">キー起動は通常Webページ上でのみ有効です。文字入力欄では誤操作防止のため反応しません。</p>
+        </div>
+
         <div class="actions">
           <button type="submit">保存</button>
           <p id="statusMessage" class="status" role="status" aria-live="polite"></p>
@@ -28,7 +50,7 @@
 
       <section class="notes" aria-label="使い方">
         <h2>使い方</h2>
-        <p>拡張機能アイコンから「サイドボタン監視」をONにしてください。通常Webページ上でサイドボタンを押すと登録URLへ移動します。</p>
+        <p>拡張機能アイコンから「起動監視」をONにしてください。通常Webページ上で選択した起動方法を使うと登録URLへ移動します。</p>
       </section>
     </main>
 

@@ -2,21 +2,27 @@ const DEFAULT_URL = "https://chatgpt.com/";
 
 const STORAGE_KEYS = {
   targetUrl: "targetUrl",
-  isEnabled: "isEnabled"
+  isEnabled: "isEnabled",
+  triggerType: "triggerType"
 };
 
 const MESSAGE_TYPES = {
-  openFromSideButton: "open-configured-url",
+  openFromTrigger: "open-configured-url",
   openNow: "open-configured-url-now"
 };
+
+const DEFAULT_TRIGGER_TYPE = "mouse";
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message.type !== "string") {
     return false;
   }
 
-  if (message.type === MESSAGE_TYPES.openFromSideButton) {
-    openConfiguredUrl({ requireEnabled: true })
+  if (message.type === MESSAGE_TYPES.openFromTrigger) {
+    openConfiguredUrl({
+      requireEnabled: true,
+      triggerType: normalizeTriggerType(message.triggerType)
+    })
       .then(() => sendResponse({ ok: true }))
       .catch((error) => {
         console.error("[Quick Side Nav] Failed to open URL:", error);
@@ -38,8 +44,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
-async function openConfiguredUrl({ requireEnabled }) {
-  if (requireEnabled && !(await isSideButtonEnabled())) {
+async function openConfiguredUrl({ requireEnabled, triggerType }) {
+  if (requireEnabled && !(await canOpenFromTrigger(triggerType))) {
     return;
   }
 
@@ -47,12 +53,17 @@ async function openConfiguredUrl({ requireEnabled }) {
   await openUrlInCurrentTab(url);
 }
 
-async function isSideButtonEnabled() {
+async function canOpenFromTrigger(triggerType) {
   const result = await chrome.storage.sync.get({
-    [STORAGE_KEYS.isEnabled]: false
+    [STORAGE_KEYS.isEnabled]: false,
+    [STORAGE_KEYS.triggerType]: DEFAULT_TRIGGER_TYPE
   });
 
-  return Boolean(result[STORAGE_KEYS.isEnabled]);
+  if (!result[STORAGE_KEYS.isEnabled]) {
+    return false;
+  }
+
+  return normalizeTriggerType(result[STORAGE_KEYS.triggerType]) === triggerType;
 }
 
 async function getTargetUrl() {
@@ -100,4 +111,8 @@ function isValidUrl(value) {
 
 function getErrorMessage(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function normalizeTriggerType(value) {
+  return value === "key" ? "key" : DEFAULT_TRIGGER_TYPE;
 }

@@ -14,11 +14,16 @@
 
       <label class="switchRow">
         <span>
-          <span class="switchTitle">サイドボタン監視</span>
+          <span class="switchTitle">起動監視</span>
           <span id="switchState" class="switchState">OFF</span>
         </span>
         <input id="enabledToggle" class="switchInput" type="checkbox" role="switch">
       </label>
+
+      <section class="target" aria-label="現在の起動方法">
+        <span class="label">起動方法</span>
+        <p id="triggerSummary" class="url">サイドボタン</p>
+      </section>
 
       <section class="target" aria-label="現在の移動先">
         <span class="label">現在の移動先</span>

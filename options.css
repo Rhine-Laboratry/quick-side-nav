@@ -55,11 +55,31 @@ p {
   gap: 8px;
 }
 
+.fieldGroup {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+}
+
+.fieldGroup legend {
+  padding: 0 6px;
+  font-weight: 700;
+}
+
+.radioRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .label {
   font-weight: 700;
 }
 
-input {
+input[type="url"] {
   width: 100%;
   min-height: 44px;
   padding: 10px 12px;
@@ -68,13 +88,39 @@ input {
   font: inherit;
 }
 
-input:focus {
+input[type="url"]:focus {
   border-color: #2563eb;
   outline: 3px solid rgba(37, 99, 235, 0.16);
 }
 
-input[aria-invalid="true"] {
+input[type="url"][aria-invalid="true"] {
   border-color: #dc2626;
+}
+
+.keySettings {
+  display: grid;
+  gap: 8px;
+}
+
+.keyCapture {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+}
+
+.keyDisplay {
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 1px solid #b8c2d2;
+  border-radius: 6px;
+  background: #f8fafc;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  color: #6b7280;
+  font-size: 13px;
 }
 
 .actions {
@@ -94,6 +140,16 @@ button {
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+}
+
+button.secondaryButton {
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid #b8c2d2;
+}
+
+button.secondaryButton:hover {
+  background: #f3f4f6;
 }
 
 button:hover {
