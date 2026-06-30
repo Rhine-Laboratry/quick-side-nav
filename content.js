@@ -2,6 +2,7 @@ const SIDE_BUTTONS = new Set([3, 4]);
 const COOLDOWN_MS = 300;
 const MESSAGE_TYPE = "open-configured-url";
 const DEFAULT_TRIGGER_TYPE = "mouse";
+const DEFAULT_MOUSE_BUTTON = "side";
 const LISTENER_OPTIONS = {
   capture: true,
   passive: false
@@ -10,8 +11,7 @@ const LISTENER_OPTIONS = {
 let lastTriggeredAt = 0;
 let settings = {
   isEnabled: false,
-  triggerType: DEFAULT_TRIGGER_TYPE,
-  triggerKey: null
+  rules: []
 };
 
 for (const eventName of ["mousedown", "mouseup", "auxclick"]) {
@@ -19,24 +19,15 @@ for (const eventName of ["mousedown", "mouseup", "auxclick"]) {
   document.addEventListener(eventName, handleMouseEvent, LISTENER_OPTIONS);
 }
 
-for (const eventName of ["keydown"]) {
-  window.addEventListener(eventName, handleKeyboardEvent, LISTENER_OPTIONS);
-  document.addEventListener(eventName, handleKeyboardEvent, LISTENER_OPTIONS);
-}
+window.addEventListener("keydown", handleKeyboardEvent, LISTENER_OPTIONS);
+document.addEventListener("keydown", handleKeyboardEvent, LISTENER_OPTIONS);
 
 loadSettings();
 
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "sync") {
-    return;
+chrome.storage.onChanged.addListener((_changes, areaName) => {
+  if (areaName === "sync") {
+    loadSettings();
   }
-
-  settings = {
-    ...settings,
-    isEnabled: getChangedValue(changes.isEnabled, settings.isEnabled),
-    triggerType: normalizeTriggerType(getChangedValue(changes.triggerType, settings.triggerType)),
-    triggerKey: normalizeTriggerKey(getChangedValue(changes.triggerKey, settings.triggerKey))
-  };
 });
 
 function handleMouseEvent(event) {
@@ -44,31 +35,42 @@ function handleMouseEvent(event) {
     return;
   }
 
-  if (!settings.isEnabled || settings.triggerType !== "mouse") {
+  if (!settings.isEnabled || !hasMatchingMouseRule(event.button)) {
     return;
   }
 
   suppressEvent(event);
-  triggerNavigation("mouse");
+  triggerNavigation({
+    type: "mouse",
+    button: event.button
+  });
 }
 
 function handleKeyboardEvent(event) {
-  if (!event.isTrusted || !matchesTriggerKey(event)) {
+  if (!event.isTrusted || isEditableTarget(event.target) || !hasMatchingKeyRule(event)) {
     return;
   }
 
   suppressEvent(event);
-  triggerNavigation("key");
+  triggerNavigation({
+    type: "key",
+    code: event.code,
+    key: event.key,
+    ctrlKey: event.ctrlKey,
+    altKey: event.altKey,
+    shiftKey: event.shiftKey,
+    metaKey: event.metaKey
+  });
 }
 
-function triggerNavigation(triggerType) {
+function triggerNavigation(trigger) {
   const now = Date.now();
   if (now - lastTriggeredAt < COOLDOWN_MS) {
     return;
   }
 
   lastTriggeredAt = now;
-  chrome.runtime.sendMessage({ type: MESSAGE_TYPE, triggerType }, () => {
+  chrome.runtime.sendMessage({ type: MESSAGE_TYPE, trigger }, () => {
     chrome.runtime.lastError;
   });
 }
@@ -76,33 +78,68 @@ function triggerNavigation(triggerType) {
 async function loadSettings() {
   const result = await chrome.storage.sync.get({
     isEnabled: false,
+    rules: null,
+    targetUrl: "https://chatgpt.com/",
     triggerType: DEFAULT_TRIGGER_TYPE,
     triggerKey: null
   });
 
   settings = {
     isEnabled: Boolean(result.isEnabled),
-    triggerType: normalizeTriggerType(result.triggerType),
-    triggerKey: normalizeTriggerKey(result.triggerKey)
+    rules: getRulesFromStorage(result)
   };
 }
 
-function matchesTriggerKey(event) {
-  const triggerKey = settings.triggerKey;
+function getRulesFromStorage(result) {
+  if (Array.isArray(result.rules)) {
+    const rules = result.rules.map(normalizeRule).filter(Boolean);
 
-  if (!settings.isEnabled || settings.triggerType !== "key" || !triggerKey) {
+    if (rules.length > 0) {
+      return rules;
+    }
+  }
+
+  const legacyRule = normalizeRule({
+    id: "legacy-default-rule",
+    targetUrl: result.targetUrl,
+    triggerType: result.triggerType,
+    mouseButton: DEFAULT_MOUSE_BUTTON,
+    triggerKey: result.triggerKey
+  });
+
+  return legacyRule ? [legacyRule] : [createDefaultRule()];
+}
+
+function hasMatchingMouseRule(button) {
+  return settings.rules.some((rule) => {
+    if (rule.triggerType !== "mouse") {
+      return false;
+    }
+
+    if (rule.mouseButton === "side") {
+      return button === 3 || button === 4;
+    }
+
+    return Number(rule.mouseButton) === button;
+  });
+}
+
+function hasMatchingKeyRule(event) {
+  if (!settings.isEnabled) {
     return false;
   }
 
-  if (isEditableTarget(event.target)) {
-    return false;
-  }
+  return settings.rules.some((rule) => {
+    if (rule.triggerType !== "key" || !rule.triggerKey) {
+      return false;
+    }
 
-  return event.code === triggerKey.code
-    && event.ctrlKey === triggerKey.ctrlKey
-    && event.altKey === triggerKey.altKey
-    && event.shiftKey === triggerKey.shiftKey
-    && event.metaKey === triggerKey.metaKey;
+    return event.code === rule.triggerKey.code
+      && event.ctrlKey === rule.triggerKey.ctrlKey
+      && event.altKey === rule.triggerKey.altKey
+      && event.shiftKey === rule.triggerKey.shiftKey
+      && event.metaKey === rule.triggerKey.metaKey;
+  });
 }
 
 function isEditableTarget(target) {
@@ -131,12 +168,39 @@ function suppressEvent(event) {
   }
 }
 
-function getChangedValue(change, fallback) {
-  return change ? change.newValue : fallback;
+function normalizeRule(rule) {
+  if (!rule || typeof rule !== "object") {
+    return null;
+  }
+
+  const triggerType = normalizeTriggerType(rule.triggerType);
+  const triggerKey = normalizeTriggerKey(rule.triggerKey);
+
+  if (triggerType === "key" && !triggerKey) {
+    return null;
+  }
+
+  return {
+    triggerType,
+    mouseButton: normalizeMouseButton(rule.mouseButton),
+    triggerKey
+  };
+}
+
+function createDefaultRule() {
+  return {
+    triggerType: "mouse",
+    mouseButton: DEFAULT_MOUSE_BUTTON,
+    triggerKey: null
+  };
 }
 
 function normalizeTriggerType(value) {
   return value === "key" ? "key" : DEFAULT_TRIGGER_TYPE;
+}
+
+function normalizeMouseButton(value) {
+  return value === "3" || value === "4" ? value : DEFAULT_MOUSE_BUTTON;
 }
 
 function normalizeTriggerKey(value) {
@@ -146,11 +210,9 @@ function normalizeTriggerKey(value) {
 
   return {
     code: value.code,
-    key: typeof value.key === "string" ? value.key : value.code,
     ctrlKey: Boolean(value.ctrlKey),
     altKey: Boolean(value.altKey),
     shiftKey: Boolean(value.shiftKey),
-    metaKey: Boolean(value.metaKey),
-    displayName: typeof value.displayName === "string" ? value.displayName : value.code
+    metaKey: Boolean(value.metaKey)
   };
 }

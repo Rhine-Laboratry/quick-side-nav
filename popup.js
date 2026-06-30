@@ -1,27 +1,27 @@
 const DEFAULT_URL = "https://chatgpt.com/";
+const DEFAULT_TRIGGER_TYPE = "mouse";
+const DEFAULT_MOUSE_BUTTON = "side";
 
 const STORAGE_KEYS = {
   targetUrl: "targetUrl",
   isEnabled: "isEnabled",
   triggerType: "triggerType",
-  triggerKey: "triggerKey"
+  triggerKey: "triggerKey",
+  rules: "rules"
 };
 
 const OPEN_NOW_MESSAGE = "open-configured-url-now";
-const DEFAULT_TRIGGER_TYPE = "mouse";
 
 document.addEventListener("DOMContentLoaded", initPopup);
 
 async function initPopup() {
   const toggle = document.getElementById("enabledToggle");
-  const openButton = document.getElementById("openButton");
   const optionsButton = document.getElementById("optionsButton");
 
   const state = await getState();
   toggle.checked = state.isEnabled;
   updateToggleLabel(state.isEnabled);
-  setTargetUrl(state.targetUrl);
-  setTriggerSummary(state.triggerType, state.triggerKey);
+  renderRules(state.rules);
 
   toggle.addEventListener("change", async () => {
     await chrome.storage.sync.set({
@@ -30,8 +30,14 @@ async function initPopup() {
     updateToggleLabel(toggle.checked);
   });
 
-  openButton.addEventListener("click", async () => {
-    await openConfiguredUrl(openButton);
+  document.getElementById("rulesList").addEventListener("click", async (event) => {
+    const ruleId = event.target?.dataset?.ruleId;
+
+    if (!ruleId) {
+      return;
+    }
+
+    await openRule(ruleId, event.target);
   });
 
   optionsButton.addEventListener("click", () => {
@@ -45,25 +51,75 @@ async function getState() {
     [STORAGE_KEYS.targetUrl]: DEFAULT_URL,
     [STORAGE_KEYS.isEnabled]: false,
     [STORAGE_KEYS.triggerType]: DEFAULT_TRIGGER_TYPE,
-    [STORAGE_KEYS.triggerKey]: null
+    [STORAGE_KEYS.triggerKey]: null,
+    [STORAGE_KEYS.rules]: null
   });
-  const targetUrl = normalizeUrl(result[STORAGE_KEYS.targetUrl]);
 
   return {
     isEnabled: Boolean(result[STORAGE_KEYS.isEnabled]),
-    targetUrl: isValidUrl(targetUrl) ? targetUrl : DEFAULT_URL,
-    triggerType: normalizeTriggerType(result[STORAGE_KEYS.triggerType]),
-    triggerKey: normalizeTriggerKey(result[STORAGE_KEYS.triggerKey])
+    rules: getRulesFromStorage(result)
   };
 }
 
-async function openConfiguredUrl(button) {
+function getRulesFromStorage(result) {
+  if (Array.isArray(result[STORAGE_KEYS.rules])) {
+    const rules = result[STORAGE_KEYS.rules].map(normalizeRule).filter(Boolean);
+
+    if (rules.length > 0) {
+      return rules;
+    }
+  }
+
+  const legacyRule = normalizeRule({
+    id: "legacy-default-rule",
+    targetUrl: result[STORAGE_KEYS.targetUrl],
+    triggerType: result[STORAGE_KEYS.triggerType],
+    mouseButton: DEFAULT_MOUSE_BUTTON,
+    triggerKey: result[STORAGE_KEYS.triggerKey]
+  });
+
+  return legacyRule ? [legacyRule] : [createDefaultRule()];
+}
+
+function renderRules(rules) {
+  const list = document.getElementById("rulesList");
+  list.replaceChildren();
+
+  rules.forEach((rule) => {
+    const item = document.createElement("article");
+    item.className = "ruleItem";
+
+    const text = document.createElement("div");
+    text.className = "ruleText";
+
+    const trigger = document.createElement("span");
+    trigger.className = "ruleTrigger";
+    trigger.textContent = getTriggerLabel(rule);
+
+    const url = document.createElement("span");
+    url.className = "ruleUrl";
+    url.textContent = rule.targetUrl;
+
+    const button = document.createElement("button");
+    button.className = "ruleOpenButton";
+    button.type = "button";
+    button.dataset.ruleId = rule.id;
+    button.textContent = "開く";
+
+    text.append(trigger, url);
+    item.append(text, button);
+    list.appendChild(item);
+  });
+}
+
+async function openRule(ruleId, button) {
   setStatus("");
   button.disabled = true;
 
   try {
     const response = await chrome.runtime.sendMessage({
-      type: OPEN_NOW_MESSAGE
+      type: OPEN_NOW_MESSAGE,
+      ruleId
     });
 
     if (!response || !response.ok) {
@@ -82,23 +138,61 @@ function updateToggleLabel(isEnabled) {
   stateLabel.textContent = isEnabled ? "ON" : "OFF";
 }
 
-function setTargetUrl(url) {
-  document.getElementById("targetUrl").textContent = url;
-}
-
-function setTriggerSummary(triggerType, triggerKey) {
-  const summary = document.getElementById("triggerSummary");
-
-  if (triggerType === "key") {
-    summary.textContent = triggerKey ? `キー: ${triggerKey.displayName}` : "キー: 未設定";
-    return;
-  }
-
-  summary.textContent = "サイドボタン";
-}
-
 function setStatus(message) {
   document.getElementById("statusMessage").textContent = message;
+}
+
+function getTriggerLabel(rule) {
+  if (rule.triggerType === "key") {
+    return rule.triggerKey ? `キー: ${rule.triggerKey.displayName}` : "キー: 未設定";
+  }
+
+  if (rule.mouseButton === "3") {
+    return "サイドボタン: 戻る側";
+  }
+
+  if (rule.mouseButton === "4") {
+    return "サイドボタン: 進む側";
+  }
+
+  return "サイドボタン";
+}
+
+function normalizeRule(rule) {
+  if (!rule || typeof rule !== "object") {
+    return null;
+  }
+
+  const targetUrl = normalizeUrl(rule.targetUrl);
+
+  if (!isValidUrl(targetUrl)) {
+    return null;
+  }
+
+  const triggerType = normalizeTriggerType(rule.triggerType);
+  const triggerKey = normalizeTriggerKey(rule.triggerKey);
+
+  if (triggerType === "key" && !triggerKey) {
+    return null;
+  }
+
+  return {
+    id: typeof rule.id === "string" && rule.id ? rule.id : "legacy-default-rule",
+    targetUrl,
+    triggerType,
+    mouseButton: normalizeMouseButton(rule.mouseButton),
+    triggerKey
+  };
+}
+
+function createDefaultRule() {
+  return {
+    id: "default-side-button-rule",
+    targetUrl: DEFAULT_URL,
+    triggerType: "mouse",
+    mouseButton: DEFAULT_MOUSE_BUTTON,
+    triggerKey: null
+  };
 }
 
 function normalizeUrl(value) {
@@ -118,12 +212,12 @@ function isValidUrl(value) {
   }
 }
 
-function getErrorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
 function normalizeTriggerType(value) {
   return value === "key" ? "key" : DEFAULT_TRIGGER_TYPE;
+}
+
+function normalizeMouseButton(value) {
+  return value === "3" || value === "4" ? value : DEFAULT_MOUSE_BUTTON;
 }
 
 function normalizeTriggerKey(value) {
@@ -140,4 +234,8 @@ function normalizeTriggerKey(value) {
     metaKey: Boolean(value.metaKey),
     displayName: typeof value.displayName === "string" ? value.displayName : value.code
   };
+}
+
+function getErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
 }

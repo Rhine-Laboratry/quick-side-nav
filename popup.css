@@ -10,7 +10,7 @@
 }
 
 body {
-  width: 320px;
+  width: 360px;
   margin: 0;
 }
 
@@ -104,19 +104,39 @@ h1 {
   font-weight: 700;
 }
 
-.url {
-  min-height: 38px;
-  max-height: 74px;
-  margin: 0;
-  padding: 9px 10px;
-  overflow-wrap: anywhere;
+.ruleList {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
   overflow-y: auto;
+}
+
+.ruleItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
   border: 1px solid #d9e0ea;
   border-radius: 6px;
   background: #f8fafc;
-  color: #111827;
-  font-size: 13px;
-  line-height: 1.45;
+}
+
+.ruleText {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ruleTrigger {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ruleUrl {
+  color: #4b5563;
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .actions {
@@ -127,7 +147,6 @@ h1 {
 
 button {
   min-height: 38px;
-  width: 100%;
   border: 0;
   border-radius: 6px;
   color: #ffffff;
@@ -151,6 +170,7 @@ button:disabled {
 }
 
 button.secondary {
+  width: 100%;
   border: 1px solid #b8c2d2;
   color: #1f2937;
   background: #ffffff;
@@ -158,6 +178,12 @@ button.secondary {
 
 button.secondary:hover {
   background: #f3f4f6;
+}
+
+.ruleOpenButton {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
 }
 
 .status {

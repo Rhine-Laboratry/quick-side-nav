@@ -14,7 +14,7 @@ body {
 }
 
 .page {
-  width: min(640px, calc(100% - 32px));
+  width: min(760px, calc(100% - 32px));
   margin: 40px auto;
   padding: 28px;
   background: #ffffff;
@@ -23,20 +23,30 @@ body {
   box-shadow: 0 12px 32px rgba(30, 41, 59, 0.08);
 }
 
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
 h1 {
-  margin: 0 0 12px;
+  margin-bottom: 12px;
   font-size: 24px;
   font-weight: 700;
 }
 
 h2 {
-  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+h3 {
   font-size: 16px;
   font-weight: 700;
 }
 
 p {
-  margin: 0;
   line-height: 1.7;
 }
 
@@ -50,28 +60,31 @@ p {
   gap: 16px;
 }
 
-.field {
-  display: grid;
-  gap: 8px;
-}
-
-.fieldGroup {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 14px;
-  border: 1px solid #d9e0ea;
-  border-radius: 8px;
-}
-
-.fieldGroup legend {
-  padding: 0 6px;
-  font-weight: 700;
-}
-
-.radioRow {
+.rulesHeader,
+.ruleHeader {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rulesList {
+  display: grid;
+  gap: 14px;
+}
+
+.ruleCard {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  background: #fbfcff;
+}
+
+.field,
+.keySettings {
+  display: grid;
   gap: 8px;
 }
 
@@ -79,27 +92,22 @@ p {
   font-weight: 700;
 }
 
-input[type="url"] {
+input[type="url"],
+select {
   width: 100%;
-  min-height: 44px;
-  padding: 10px 12px;
+  min-height: 42px;
+  padding: 9px 12px;
   border: 1px solid #b8c2d2;
   border-radius: 6px;
+  background: #ffffff;
+  color: #1f2937;
   font: inherit;
 }
 
-input[type="url"]:focus {
+input[type="url"]:focus,
+select:focus {
   border-color: #2563eb;
   outline: 3px solid rgba(37, 99, 235, 0.16);
-}
-
-input[type="url"][aria-invalid="true"] {
-  border-color: #dc2626;
-}
-
-.keySettings {
-  display: grid;
-  gap: 8px;
 }
 
 .keyCapture {
@@ -142,6 +150,19 @@ button {
   cursor: pointer;
 }
 
+button:hover {
+  background: #1d4ed8;
+}
+
+button:active {
+  background: #1e40af;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
 button.secondaryButton {
   color: #1f2937;
   background: #ffffff;
@@ -152,12 +173,20 @@ button.secondaryButton:hover {
   background: #f3f4f6;
 }
 
-button:hover {
-  background: #1d4ed8;
+button.dangerButton {
+  color: #b91c1c;
+  background: #ffffff;
+  border: 1px solid #f1b4b4;
 }
 
-button:active {
-  background: #1e40af;
+button.dangerButton:hover {
+  background: #fff1f1;
+}
+
+button.compactButton {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
 }
 
 .status {
@@ -178,4 +207,26 @@ button:active {
   padding-top: 20px;
   border-top: 1px solid #e5e7eb;
   color: #4b5563;
+}
+
+@media (max-width: 560px) {
+  .page {
+    margin: 20px auto;
+    padding: 20px;
+  }
+
+  .rulesHeader,
+  .ruleHeader,
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .keyCapture {
+    grid-template-columns: 1fr;
+  }
+
+  button {
+    width: 100%;
+  }
 }

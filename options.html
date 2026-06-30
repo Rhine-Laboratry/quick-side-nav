@@ -10,37 +10,20 @@
     <main class="page">
       <h1>Quick Side Nav 設定</h1>
       <p class="description">
-        通常Webページ上でサイドボタンまたは設定したキーを押すと、この拡張機能が現在のタブを下記URLへ移動します。
+        通常Webページ上のキーやサイドボタンを、別々の移動先URLへ割り当てます。
         Chrome内部ページやアドレスバー上では動作しません。
       </p>
 
       <form id="settingsForm" class="form" novalidate>
-        <label class="field">
-          <span class="label">移動先URL</span>
-          <input id="targetUrl" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://chatgpt.com/">
-        </label>
-
-        <fieldset class="fieldGroup">
-          <legend>起動方法</legend>
-          <label class="radioRow">
-            <input id="triggerMouse" type="radio" name="triggerType" value="mouse">
-            <span>サイドボタン</span>
-          </label>
-          <label class="radioRow">
-            <input id="triggerKey" type="radio" name="triggerType" value="key">
-            <span>キー</span>
-          </label>
-        </fieldset>
-
-        <div id="keySettings" class="keySettings">
-          <span class="label">起動キー</span>
-          <div class="keyCapture">
-            <output id="triggerKeyDisplay" class="keyDisplay">未設定</output>
-            <button id="captureKeyButton" class="secondaryButton" type="button">キーを記録</button>
-            <button id="clearKeyButton" class="secondaryButton" type="button">解除</button>
+        <section class="rulesHeader" aria-label="起動ルール">
+          <div>
+            <h2>起動ルール</h2>
+            <p class="hint">例：QキーでURL 1へ移動、サイドボタンでURL 2へ移動。</p>
           </div>
-          <p class="hint">キー起動は通常Webページ上でのみ有効です。文字入力欄では誤操作防止のため反応しません。</p>
-        </div>
+          <button id="addRuleButton" class="secondaryButton compactButton" type="button">ルールを追加</button>
+        </section>
+
+        <div id="rulesList" class="rulesList"></div>
 
         <div class="actions">
           <button type="submit">保存</button>
@@ -50,7 +33,7 @@
 
       <section class="notes" aria-label="使い方">
         <h2>使い方</h2>
-        <p>拡張機能アイコンから「起動監視」をONにしてください。通常Webページ上で選択した起動方法を使うと登録URLへ移動します。</p>
+        <p>拡張機能アイコンから「起動監視」をONにしてください。通常Webページ上で登録したキーやサイドボタンを使うと、対応するURLへ移動します。</p>
       </section>
     </main>
 
