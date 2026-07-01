@@ -1,0 +1,170 @@
+name: Chrome Web Store deploy
+
+on:
+  push:
+    branches:
+      - "v*.*"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Submit the uploaded package for Chrome Web Store review"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Package and deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate release branch and manifest version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          branch="${GITHUB_REF_NAME}"
+          if [[ ! "$branch" =~ ^v[0-9]+\.[0-9]+$ ]]; then
+            echo "Release deployments must run from a v<major>.<minor> branch such as v1.2. Current branch: $branch" >&2
+            exit 1
+          fi
+
+          version="$(node -p "require('./manifest.json').version")"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "manifest.json version must be a Chrome extension version such as 1.2.3. Found: $version" >&2
+            exit 1
+          fi
+
+          minor="${version%.*}"
+          if [[ "$branch" != "v$minor" ]]; then
+            echo "Release branch and manifest version do not match. Branch: $branch, manifest version: $version, expected branch: v$minor" >&2
+            exit 1
+          fi
+
+      - name: Validate source files
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e "JSON.parse(require('fs').readFileSync('manifest.json', 'utf8')); console.log('manifest ok')"
+          node --check background.js
+          node --check content.js
+          node --check popup.js
+          node --check options.js
+
+      - name: Build extension ZIP
+        shell: pwsh
+        run: ./scripts/package-extension.ps1 -OutputDirectory dist
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-extension-package
+          path: dist/*.zip
+          if-no-files-found: error
+
+      - name: Verify Chrome Web Store secrets
+        shell: bash
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+          for name in CWS_CLIENT_ID CWS_CLIENT_SECRET CWS_REFRESH_TOKEN CWS_PUBLISHER_ID CWS_EXTENSION_ID; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required GitHub Secrets: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Request Chrome Web Store access token
+        id: token
+        shell: bash
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          response="$(
+            curl -sS --fail-with-body -X POST "https://oauth2.googleapis.com/token" \
+              --data-urlencode "client_id=${CWS_CLIENT_ID}" \
+              --data-urlencode "client_secret=${CWS_CLIENT_SECRET}" \
+              --data-urlencode "refresh_token=${CWS_REFRESH_TOKEN}" \
+              --data-urlencode "grant_type=refresh_token"
+          )"
+
+          access_token="$(
+            node -e '
+              let body = "";
+              process.stdin.on("data", chunk => body += chunk);
+              process.stdin.on("end", () => {
+                const parsed = JSON.parse(body);
+                if (!parsed.access_token) {
+                  console.error(body);
+                  process.exit(1);
+                }
+                process.stdout.write(parsed.access_token);
+              });
+            ' <<< "$response"
+          )"
+
+          echo "::add-mask::$access_token"
+          echo "access_token=$access_token" >> "$GITHUB_OUTPUT"
+
+      - name: Upload package to Chrome Web Store
+        shell: bash
+        env:
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          ACCESS_TOKEN: ${{ steps.token.outputs.access_token }}
+        run: |
+          set -euo pipefail
+
+          package_file="$(find dist -maxdepth 1 -name 'quick-side-nav-v*.zip' -type f | sort | head -n 1)"
+          if [[ -z "$package_file" ]]; then
+            echo "No package file found in dist/." >&2
+            exit 1
+          fi
+
+          curl -sS --fail-with-body \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -H "Content-Type: application/zip" \
+            -X POST \
+            -T "$package_file" \
+            "https://chromewebstore.googleapis.com/upload/v2/publishers/${CWS_PUBLISHER_ID}/items/${CWS_EXTENSION_ID}:upload"
+
+      - name: Submit for Chrome Web Store review
+        shell: bash
+        env:
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          ACCESS_TOKEN: ${{ steps.token.outputs.access_token }}
+          PUBLISH_INPUT: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${PUBLISH_INPUT}" != "true" ]]; then
+            echo "Package uploaded. Skipping publish because workflow_dispatch publish=false."
+            exit 0
+          fi
+
+          curl -sS --fail-with-body \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -X POST \
+            "https://chromewebstore.googleapis.com/v2/publishers/${CWS_PUBLISHER_ID}/items/${CWS_EXTENSION_ID}:publish"

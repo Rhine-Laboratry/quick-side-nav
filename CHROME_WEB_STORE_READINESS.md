@@ -143,6 +143,25 @@ Current repo/package state: `manifest.json` declares `icons/icon-16.png`, `icons
 - [x] Confirm the privacy declaration says only what the current code does.
 - [x] Confirm all dashboard permission justifications mention why broad `http://` / `https://` page access is needed for user-trigger detection.
 
+## Automated deploy
+
+Release updates are deployed by the `Chrome Web Store deploy` GitHub Actions workflow.
+
+- Release branches must be named `v<major>.<minor>`, such as `v1.2`.
+- The branch name must match the first two parts of `manifest.json` version.
+- Pushes to a matching release branch build the ZIP, upload it to Chrome Web Store, and submit it for review.
+- Manual workflow runs can upload without publishing by setting `publish=false`.
+
+Required GitHub Secrets:
+
+- `CWS_CLIENT_ID`
+- `CWS_CLIENT_SECRET`
+- `CWS_REFRESH_TOKEN`
+- `CWS_PUBLISHER_ID`
+- `CWS_EXTENSION_ID`
+
+See `RELEASE.md` for the exact release procedure.
+
 ## Official references used
 
 - Chrome Web Store Program Policies: https://developer.chrome.com/docs/webstore/program-policies
@@ -150,3 +169,4 @@ Current repo/package state: `manifest.json` declares `icons/icon-16.png`, `icons
 - Store listing guidance: https://developer.chrome.com/docs/webstore/cws-dashboard-listing
 - Required/optional image assets: https://developer.chrome.com/docs/webstore/images
 - Reviewer test instructions: https://developer.chrome.com/docs/webstore/cws-dashboard-test-instructions
+- Chrome Web Store API: https://developer.chrome.com/docs/webstore/using-api

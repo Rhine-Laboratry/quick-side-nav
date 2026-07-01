@@ -83,7 +83,9 @@ G HUB、Logicool Options+、AutoHotkeyなどの外部ツールは不要です。
 公開用ZIPはリポジトリ直下で次のコマンドを実行して作成します。
 
 ```powershell
-Compress-Archive -Path manifest.json,background.js,content.js,options.html,options.js,options.css,popup.html,popup.js,popup.css,README.md,PRIVACY.md,icons -DestinationPath quick-side-nav.zip -Force
+./scripts/package-extension.ps1 -OutputDirectory dist
 ```
 
 Chrome Web Storeのダッシュボードには、ZIPとは別に `store-assets` 内のスクリーンショットやプロモーション画像をアップロードします。
+
+リリースブランチとGitHub Actionsによるデプロイ手順は [RELEASE.md](RELEASE.md) を参照してください。
