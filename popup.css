@@ -52,6 +52,15 @@ h1 {
   font-size: 12px;
 }
 
+.switchHint {
+  display: block;
+  max-width: 230px;
+  margin-top: 4px;
+  color: #4b5563;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .switchInput {
   position: relative;
   width: 44px;
@@ -87,7 +96,8 @@ h1 {
   transform: translateX(20px);
 }
 
-.switchInput:focus {
+.switchInput:focus,
+button:focus-visible {
   outline: 3px solid rgba(37, 99, 235, 0.18);
   outline-offset: 2px;
 }
@@ -184,6 +194,7 @@ button.secondary:hover {
   min-height: 30px;
   padding: 0 12px;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .status {

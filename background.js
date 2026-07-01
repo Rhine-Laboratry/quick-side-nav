@@ -1,4 +1,4 @@
-const DEFAULT_URL = "https://chatgpt.com/";
+const DEFAULT_URL = "https://example.com/";
 
 const STORAGE_KEYS = {
   targetUrl: "targetUrl",
@@ -15,6 +15,21 @@ const MESSAGE_TYPES = {
 
 const DEFAULT_TRIGGER_TYPE = "mouse";
 const DEFAULT_MOUSE_BUTTON = "side";
+const ENABLED_BADGE_COLOR = "#047857";
+
+chrome.runtime.onInstalled.addListener(() => {
+  syncActionBadge();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  syncActionBadge();
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "sync" && STORAGE_KEYS.isEnabled in changes) {
+    syncActionBadge();
+  }
+});
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message.type !== "string") {
@@ -43,6 +58,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   return false;
 });
+
+syncActionBadge();
 
 async function openFromTrigger(trigger) {
   const settings = await getSettings();
@@ -246,6 +263,21 @@ function normalizeTriggerKey(value) {
 
 function createRuleId() {
   return `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function syncActionBadge() {
+  try {
+    const result = await chrome.storage.sync.get({
+      [STORAGE_KEYS.isEnabled]: false
+    });
+
+    await chrome.action.setBadgeBackgroundColor({ color: ENABLED_BADGE_COLOR });
+    await chrome.action.setBadgeText({
+      text: result[STORAGE_KEYS.isEnabled] ? "ON" : ""
+    });
+  } catch (error) {
+    console.warn("[Quick Side Nav] Failed to update badge:", error);
+  }
 }
 
 function getErrorMessage(error) {

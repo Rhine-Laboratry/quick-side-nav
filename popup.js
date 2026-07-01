@@ -1,4 +1,4 @@
-const DEFAULT_URL = "https://chatgpt.com/";
+const DEFAULT_URL = "https://example.com/";
 const DEFAULT_TRIGGER_TYPE = "mouse";
 const DEFAULT_MOUSE_BUTTON = "side";
 
@@ -104,7 +104,7 @@ function renderRules(rules) {
     button.className = "ruleOpenButton";
     button.type = "button";
     button.dataset.ruleId = rule.id;
-    button.textContent = "開く";
+    button.textContent = "このタブで開く";
 
     text.append(trigger, url);
     item.append(text, button);
@@ -135,7 +135,12 @@ async function openRule(ruleId, button) {
 
 function updateToggleLabel(isEnabled) {
   const stateLabel = document.getElementById("switchState");
+  const hintLabel = document.getElementById("switchHint");
+
   stateLabel.textContent = isEnabled ? "ON" : "OFF";
+  hintLabel.textContent = isEnabled
+    ? "通常Webページ上で検知します。既に開いているページでは再読み込みが必要です。"
+    : "登録済みの入力は反応しません。";
 }
 
 function setStatus(message) {

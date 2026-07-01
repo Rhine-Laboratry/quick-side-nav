@@ -14,10 +14,11 @@
 
       <label class="switchRow">
         <span>
-          <span class="switchTitle">起動監視</span>
+          <span class="switchTitle">入力監視</span>
           <span id="switchState" class="switchState">OFF</span>
+          <span id="switchHint" class="switchHint">登録済みの入力は反応しません。</span>
         </span>
-        <input id="enabledToggle" class="switchInput" type="checkbox" role="switch">
+        <input id="enabledToggle" class="switchInput" type="checkbox" role="switch" aria-describedby="switchHint">
       </label>
 
       <section class="target" aria-label="登録ルール">

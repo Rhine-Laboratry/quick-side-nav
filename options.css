@@ -9,6 +9,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
 }
@@ -105,9 +109,15 @@ select {
 }
 
 input[type="url"]:focus,
-select:focus {
+select:focus,
+button:focus-visible {
   border-color: #2563eb;
   outline: 3px solid rgba(37, 99, 235, 0.16);
+}
+
+[aria-invalid="true"] {
+  border-color: #dc2626 !important;
+  outline: 3px solid rgba(220, 38, 38, 0.16);
 }
 
 .keyCapture {
@@ -196,6 +206,10 @@ button.compactButton {
 
 .status.success {
   color: #047857;
+}
+
+.status.pending {
+  color: #9a3412;
 }
 
 .status.error {

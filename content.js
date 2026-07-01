@@ -40,6 +40,11 @@ function handleMouseEvent(event) {
   }
 
   suppressEvent(event);
+
+  if (event.type !== "mousedown") {
+    return;
+  }
+
   triggerNavigation({
     type: "mouse",
     button: event.button
@@ -52,6 +57,11 @@ function handleKeyboardEvent(event) {
   }
 
   suppressEvent(event);
+
+  if (event.repeat) {
+    return;
+  }
+
   triggerNavigation({
     type: "key",
     code: event.code,
@@ -79,7 +89,7 @@ async function loadSettings() {
   const result = await chrome.storage.sync.get({
     isEnabled: false,
     rules: null,
-    targetUrl: "https://chatgpt.com/",
+    targetUrl: "https://example.com/",
     triggerType: DEFAULT_TRIGGER_TYPE,
     triggerKey: null
   });

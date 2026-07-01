@@ -1,6 +1,7 @@
-const DEFAULT_URL = "https://chatgpt.com/";
+const DEFAULT_URL = "https://example.com/";
 const DEFAULT_TRIGGER_TYPE = "mouse";
 const DEFAULT_MOUSE_BUTTON = "side";
+const KEY_CAPTURE_TIMEOUT_MS = 15000;
 
 const STORAGE_KEYS = {
   targetUrl: "targetUrl",
@@ -11,6 +12,8 @@ const STORAGE_KEYS = {
 
 let rules = [];
 let isCapturingKey = false;
+let hasUnsavedChanges = false;
+let keyCaptureSession = null;
 
 document.addEventListener("DOMContentLoaded", initOptions);
 
@@ -26,12 +29,14 @@ async function initOptions() {
   document.getElementById("addRuleButton").addEventListener("click", () => {
     rules.push(createRule());
     renderRules();
-    showStatus("ルールを追加しました。保存すると反映されます。", "success");
+    markDirty("ルールを追加しました。保存すると反映されます。");
   });
 
   document.getElementById("rulesList").addEventListener("input", handleRuleInput);
   document.getElementById("rulesList").addEventListener("change", handleRuleChange);
   document.getElementById("rulesList").addEventListener("click", handleRuleClick);
+
+  window.addEventListener("beforeunload", warnBeforeLeaving);
 }
 
 async function getSavedRules() {
@@ -220,10 +225,13 @@ function handleRuleInput(event) {
     return;
   }
 
+  event.target.removeAttribute("aria-invalid");
+
   const rule = getRuleFromElement(event.target);
 
   if (rule) {
     rule.targetUrl = event.target.value;
+    markDirty();
   }
 }
 
@@ -238,11 +246,13 @@ function handleRuleChange(event) {
   if (field === "triggerType") {
     rule.triggerType = normalizeTriggerType(event.target.value);
     renderRules();
+    markDirty();
     return;
   }
 
   if (field === "mouseButton") {
     rule.mouseButton = normalizeMouseButton(event.target.value);
+    markDirty();
   }
 }
 
@@ -272,7 +282,7 @@ function handleRuleClick(event) {
   if (action === "clear-key") {
     rule.triggerKey = null;
     renderRules();
-    showStatus("起動キーを解除しました。保存すると反映されます。", "success");
+    markDirty("起動キーを解除しました。保存すると反映されます。");
   }
 }
 
@@ -284,7 +294,7 @@ function deleteRule(ruleId) {
 
   rules = rules.filter((rule) => rule.id !== ruleId);
   renderRules();
-  showStatus("ルールを削除しました。保存すると反映されます。", "success");
+  markDirty("ルールを削除しました。保存すると反映されます。");
 }
 
 function startKeyCapture(ruleId, button) {
@@ -293,21 +303,39 @@ function startKeyCapture(ruleId, button) {
   }
 
   isCapturingKey = true;
+  keyCaptureSession = {
+    ruleId,
+    timeoutId: window.setTimeout(() => {
+      cancelKeyCapture("キー記録が時間切れになりました。もう一度「キーを記録」を押してください。", "error");
+    }, KEY_CAPTURE_TIMEOUT_MS)
+  };
+
   button.textContent = "キーを押してください";
   button.disabled = true;
-  showStatus("起動に使うキーを押してください。", "success");
+  showStatus("起動に使うキーを押してください。Escでキャンセルできます。", "pending");
 
-  window.addEventListener("keydown", (event) => captureKey(event, ruleId), {
-    capture: true,
-    once: true
-  });
+  window.addEventListener("keydown", handleKeyCaptureKeyDown, { capture: true });
+  window.addEventListener("blur", handleKeyCaptureBlur, { once: true });
+}
+
+function handleKeyCaptureKeyDown(event) {
+  captureKey(event, keyCaptureSession?.ruleId);
+}
+
+function handleKeyCaptureBlur() {
+  cancelKeyCapture("画面が非アクティブになったため、キー記録をキャンセルしました。", "pending");
 }
 
 function captureKey(event, ruleId) {
   event.preventDefault();
   event.stopPropagation();
 
-  isCapturingKey = false;
+  if (event.key === "Escape") {
+    cancelKeyCapture("キー記録をキャンセルしました。", "pending");
+    return;
+  }
+
+  clearKeyCaptureSession();
 
   const rule = rules.find((candidate) => candidate.id === ruleId);
 
@@ -322,19 +350,47 @@ function captureKey(event, ruleId) {
     return;
   }
 
-  rule.triggerKey = serializeKeyboardEvent(event);
+  const triggerKey = serializeKeyboardEvent(event);
+  rule.triggerKey = triggerKey;
   renderRules();
-  showStatus("起動キーを記録しました。保存すると反映されます。", "success");
+  markDirty(getShortcutWarning(triggerKey) || "起動キーを記録しました。保存すると反映されます。");
+}
+
+function cancelKeyCapture(message, type) {
+  clearKeyCaptureSession();
+  renderRules();
+  showStatus(message, type);
+}
+
+function clearKeyCaptureSession() {
+  isCapturingKey = false;
+  window.removeEventListener("keydown", handleKeyCaptureKeyDown, { capture: true });
+  window.removeEventListener("blur", handleKeyCaptureBlur);
+
+  if (keyCaptureSession?.timeoutId) {
+    window.clearTimeout(keyCaptureSession.timeoutId);
+  }
+
+  keyCaptureSession = null;
 }
 
 async function saveSettings() {
   const normalizedRules = [];
+  clearValidationState();
 
   for (const [index, rule] of rules.entries()) {
+    const validationError = getRuleValidationError(rule, index);
+
+    if (validationError) {
+      showStatus(validationError.message, "error");
+      focusInvalidRuleField(rule.id, validationError.field);
+      return;
+    }
+
     const normalizedRule = normalizeRule(rule);
 
     if (!normalizedRule) {
-      showStatus(`ルール ${index + 1} を確認してください。URLと起動キーが必要です。`, "error");
+      showStatus(`ルール ${index + 1} を確認してください。`, "error");
       return;
     }
 
@@ -356,8 +412,54 @@ async function saveSettings() {
   });
 
   rules = normalizedRules;
+  hasUnsavedChanges = false;
   renderRules();
   showStatus("保存しました。", "success");
+}
+
+function getRuleValidationError(rule, index) {
+  const ruleNumber = index + 1;
+  const targetUrl = normalizeUrl(rule.targetUrl);
+  const triggerType = normalizeTriggerType(rule.triggerType);
+
+  if (!isValidUrl(targetUrl)) {
+    return {
+      field: "targetUrl",
+      message: `ルール ${ruleNumber} のURLを確認してください。https:// または http:// から始まるURLが必要です。`
+    };
+  }
+
+  if (triggerType === "key" && !normalizeTriggerKey(rule.triggerKey)) {
+    return {
+      field: "triggerKey",
+      message: `ルール ${ruleNumber} の起動キーを記録してください。`
+    };
+  }
+
+  return null;
+}
+
+function clearValidationState() {
+  document.querySelectorAll("[aria-invalid='true']").forEach((element) => {
+    element.removeAttribute("aria-invalid");
+  });
+}
+
+function focusInvalidRuleField(ruleId, field) {
+  const card = document.querySelector(`[data-rule-id="${CSS.escape(ruleId)}"]`);
+
+  if (!card) {
+    return;
+  }
+
+  const element = field === "targetUrl"
+    ? card.querySelector("[data-field='targetUrl']")
+    : card.querySelector("[data-action='capture-key']");
+
+  if (element) {
+    element.setAttribute("aria-invalid", "true");
+    element.focus();
+  }
 }
 
 function findDuplicateTriggerMessage(ruleList) {
@@ -396,6 +498,34 @@ function getKeySignature(triggerKey) {
     triggerKey.shiftKey ? "shift" : "",
     triggerKey.metaKey ? "meta" : ""
   ].join("|");
+}
+
+function getShortcutWarning(triggerKey) {
+  const code = triggerKey.code;
+  const withCtrlOrMeta = triggerKey.ctrlKey || triggerKey.metaKey;
+  const withAlt = triggerKey.altKey;
+  const browserShortcutCodes = new Set([
+    "KeyL",
+    "KeyN",
+    "KeyR",
+    "KeyT",
+    "KeyW",
+    "Tab"
+  ]);
+
+  if (code === "F5" || code === "F11") {
+    return "このキーはブラウザ操作と競合する場合があります。必要なら別のキーに変更してください。保存すると反映されます。";
+  }
+
+  if (withCtrlOrMeta && browserShortcutCodes.has(code)) {
+    return "このショートカットはブラウザ操作と競合する場合があります。必要なら別のキーに変更してください。保存すると反映されます。";
+  }
+
+  if (withAlt && (code === "ArrowLeft" || code === "ArrowRight")) {
+    return "このショートカットはブラウザの戻る・進むと競合する場合があります。必要なら別のキーに変更してください。保存すると反映されます。";
+  }
+
+  return "";
 }
 
 function getRuleFromElement(element) {
@@ -537,6 +667,20 @@ function formatBaseKey(key, code) {
 
 function createRuleId() {
   return `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function markDirty(message = "未保存の変更があります。保存すると反映されます。") {
+  hasUnsavedChanges = true;
+  showStatus(message, "pending");
+}
+
+function warnBeforeLeaving(event) {
+  if (!hasUnsavedChanges) {
+    return;
+  }
+
+  event.preventDefault();
+  event.returnValue = "";
 }
 
 function showStatus(message, type) {

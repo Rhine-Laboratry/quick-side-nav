@@ -20,7 +20,7 @@ G HUB、Logicool Options+、AutoHotkeyなどの外部ツールは不要です。
 ## 使い始める
 
 1. 拡張機能アイコンをクリックする
-2. 「起動監視」をONにする
+2. 「入力監視」をONにする
 3. 「設定を開く」を押す
 4. 起動ルールを追加する
 5. 各ルールに起動方法と移動先URLを設定して保存する
@@ -44,6 +44,7 @@ G HUB、Logicool Options+、AutoHotkeyなどの外部ツールは不要です。
 ## URL
 
 保存できるURLは `https://` または `http://` で始まるURLだけです。
+初期URLは動作確認用の `https://example.com/` です。実際に使うURLへ変更して保存してください。
 
 ## 動作対象と制約
 
@@ -51,6 +52,7 @@ G HUB、Logicool Options+、AutoHotkeyなどの外部ツールは不要です。
 - `chrome://extensions` や `chrome://settings` などのChrome内部ページでは動作しません
 - Chrome Web Storeや他の拡張機能ページなど、content scriptを注入できないページでは動作しません
 - アドレスバー、タブバー、ブックマークバー上では動作しません
+- iframe内では動作しない場合があります
 - キー起動は、inputやtextareaなどの文字入力欄では誤操作防止のため動作しません
 - ChromeやOSが予約しているショートカットは動作しない場合があります
 - ページ側やブラウザ側の戻る・進む動作と競合する場合があります
@@ -59,7 +61,7 @@ G HUB、Logicool Options+、AutoHotkeyなどの外部ツールは不要です。
 
 ### サイドボタンやキーで動かない
 
-- 拡張機能アイコンをクリックし、「起動監視」がONになっているか確認してください
+- 拡張機能アイコンをクリックし、「入力監視」がONになっているか確認してください
 - 設定画面で起動ルールが保存されているか確認してください
 - 通常Webページ上で確認してください
 - ページ本文の上にマウスカーソルを置いて押してください
@@ -70,8 +72,18 @@ G HUB、Logicool Options+、AutoHotkeyなどの外部ツールは不要です。
 
 - optionsページでURLが保存されているか確認してください
 - `https://` または `http://` から始まるURLを入力してください
-- popupの各ルールの「開く」で移動できるか確認してください
+- popupの各ルールの「このタブで開く」で移動できるか確認してください
 
 ### Chrome内部ページで動かない
 
 `chrome://extensions` や `chrome://settings` などの内部ページではcontent scriptが動作しません。通常のWebページで確認してください。
+
+## Chrome Web Store用パッケージ
+
+公開用ZIPはリポジトリ直下で次のコマンドを実行して作成します。
+
+```powershell
+Compress-Archive -Path manifest.json,background.js,content.js,options.html,options.js,options.css,popup.html,popup.js,popup.css,README.md,PRIVACY.md,icons -DestinationPath quick-side-nav.zip -Force
+```
+
+Chrome Web Storeのダッシュボードには、ZIPとは別に `store-assets` 内のスクリーンショットやプロモーション画像をアップロードします。
