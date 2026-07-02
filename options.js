@@ -7,10 +7,12 @@ const STORAGE_KEYS = {
   targetUrl: "targetUrl",
   triggerType: "triggerType",
   triggerKey: "triggerKey",
-  rules: "rules"
+  rules: "rules",
+  urlPresets: "urlPresets"
 };
 
 let rules = [];
+let urlPresets = [];
 let isCapturingKey = false;
 let hasUnsavedChanges = false;
 let keyCaptureSession = null;
@@ -18,12 +20,24 @@ let keyCaptureSession = null;
 document.addEventListener("DOMContentLoaded", initOptions);
 
 async function initOptions() {
-  rules = await getSavedRules();
+  const savedSettings = await getSavedSettings();
+  rules = savedSettings.rules;
+  urlPresets = savedSettings.urlPresets;
+  renderPresets();
   renderRules();
 
   document.getElementById("settingsForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     await saveSettings();
+  });
+
+  document.getElementById("addPresetButton").addEventListener("click", () => {
+    const preset = createUrlPreset();
+    urlPresets.push(preset);
+    renderPresets();
+    renderRules();
+    focusPresetInput(preset.id, "targetUrl");
+    markDirty("プリセットを追加しました。URLを入力して保存してください。");
   });
 
   document.getElementById("addRuleButton").addEventListener("click", () => {
@@ -32,6 +46,8 @@ async function initOptions() {
     markDirty("ルールを追加しました。保存すると反映されます。");
   });
 
+  document.getElementById("presetsList").addEventListener("input", handlePresetInput);
+  document.getElementById("presetsList").addEventListener("click", handlePresetClick);
   document.getElementById("rulesList").addEventListener("input", handleRuleInput);
   document.getElementById("rulesList").addEventListener("change", handleRuleChange);
   document.getElementById("rulesList").addEventListener("click", handleRuleClick);
@@ -39,17 +55,37 @@ async function initOptions() {
   window.addEventListener("beforeunload", warnBeforeLeaving);
 }
 
-async function getSavedRules() {
+async function getSavedSettings() {
   const result = await chrome.storage.sync.get({
+    [STORAGE_KEYS.urlPresets]: null,
     [STORAGE_KEYS.rules]: null,
     [STORAGE_KEYS.targetUrl]: DEFAULT_URL,
     [STORAGE_KEYS.triggerType]: DEFAULT_TRIGGER_TYPE,
     [STORAGE_KEYS.triggerKey]: null
   });
 
+  const savedPresets = getUrlPresetsFromStorage(result);
+
+  return {
+    urlPresets: savedPresets,
+    rules: getRulesFromStorage(result, savedPresets)
+  };
+}
+
+function getUrlPresetsFromStorage(result) {
+  if (!Array.isArray(result[STORAGE_KEYS.urlPresets])) {
+    return [];
+  }
+
+  return result[STORAGE_KEYS.urlPresets]
+    .map(normalizeUrlPreset)
+    .filter(Boolean);
+}
+
+function getRulesFromStorage(result, presetList) {
   if (Array.isArray(result[STORAGE_KEYS.rules])) {
     const savedRules = result[STORAGE_KEYS.rules]
-      .map(normalizeRule)
+      .map((rule) => normalizeRule(rule, presetList))
       .filter(Boolean);
 
     if (savedRules.length > 0) {
@@ -70,6 +106,92 @@ function createLegacyRule(result) {
     mouseButton: DEFAULT_MOUSE_BUTTON,
     triggerKey: result[STORAGE_KEYS.triggerKey]
   }) || createDefaultRule();
+}
+
+function renderPresets() {
+  const list = document.getElementById("presetsList");
+  list.replaceChildren();
+
+  if (urlPresets.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "emptyState";
+    empty.textContent = "保存済みプリセットはありません。";
+    list.appendChild(empty);
+    return;
+  }
+
+  urlPresets.forEach((preset, index) => {
+    list.appendChild(createPresetCard(preset, index));
+  });
+}
+
+function createPresetCard(preset, index) {
+  const card = document.createElement("section");
+  card.className = "presetCard";
+  card.dataset.presetId = preset.id;
+  card.setAttribute("aria-label", `URLプリセット ${index + 1}`);
+
+  const header = document.createElement("header");
+  header.className = "ruleHeader";
+
+  const title = document.createElement("h3");
+  title.textContent = `プリセット ${index + 1}`;
+
+  const deleteButton = document.createElement("button");
+  deleteButton.className = "dangerButton compactButton";
+  deleteButton.type = "button";
+  deleteButton.dataset.action = "delete-preset";
+  deleteButton.textContent = "削除";
+
+  header.append(title, deleteButton);
+
+  const fields = document.createElement("div");
+  fields.className = "presetFields";
+  fields.append(createPresetLabelField(preset), createPresetUrlField(preset));
+
+  card.append(header, fields);
+  return card;
+}
+
+function createPresetLabelField(preset) {
+  const label = document.createElement("label");
+  label.className = "field";
+
+  const text = document.createElement("span");
+  text.className = "label";
+  text.textContent = "表示名";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.autocomplete = "off";
+  input.maxLength = 80;
+  input.placeholder = "例：ChatGPT";
+  input.dataset.presetField = "label";
+  input.value = preset.label;
+
+  label.append(text, input);
+  return label;
+}
+
+function createPresetUrlField(preset) {
+  const label = document.createElement("label");
+  label.className = "field";
+
+  const text = document.createElement("span");
+  text.className = "label";
+  text.textContent = "URL";
+
+  const input = document.createElement("input");
+  input.type = "url";
+  input.inputMode = "url";
+  input.autocomplete = "url";
+  input.spellcheck = false;
+  input.placeholder = DEFAULT_URL;
+  input.dataset.presetField = "targetUrl";
+  input.value = preset.targetUrl;
+
+  label.append(text, input);
+  return label;
 }
 
 function renderRules() {
@@ -190,8 +312,38 @@ function createKeySettings(rule) {
 }
 
 function createUrlField(rule) {
-  const label = document.createElement("label");
-  label.className = "field";
+  const wrapper = document.createElement("div");
+  wrapper.className = "urlSettings";
+
+  const presetLabel = document.createElement("label");
+  presetLabel.className = "field";
+
+  const presetText = document.createElement("span");
+  presetText.className = "label";
+  presetText.textContent = "URLプリセット";
+
+  const presetSelect = document.createElement("select");
+  presetSelect.dataset.field = "presetId";
+
+  const selectedPresetId = getRulePresetId(rule);
+
+  if (urlPresets.length === 0) {
+    presetSelect.append(createOption("", "プリセットなし", true));
+    presetSelect.disabled = true;
+  } else {
+    presetSelect.append(createOption("", "直接入力", selectedPresetId === ""));
+
+    urlPresets.forEach((preset) => {
+      presetSelect.append(
+        createOption(preset.id, getPresetDisplayName(preset), selectedPresetId === preset.id)
+      );
+    });
+  }
+
+  presetLabel.append(presetText, presetSelect);
+
+  const urlLabel = document.createElement("label");
+  urlLabel.className = "field";
 
   const text = document.createElement("span");
   text.className = "label";
@@ -206,8 +358,9 @@ function createUrlField(rule) {
   input.dataset.field = "targetUrl";
   input.value = rule.targetUrl;
 
-  label.append(text, input);
-  return label;
+  urlLabel.append(text, input);
+  wrapper.append(presetLabel, urlLabel);
+  return wrapper;
 }
 
 function createOption(value, label, selected) {
@@ -216,6 +369,50 @@ function createOption(value, label, selected) {
   option.textContent = label;
   option.selected = selected;
   return option;
+}
+
+function handlePresetInput(event) {
+  const field = event.target?.dataset?.presetField;
+
+  if (!field) {
+    return;
+  }
+
+  event.target.removeAttribute("aria-invalid");
+
+  const preset = getPresetFromElement(event.target);
+
+  if (!preset) {
+    return;
+  }
+
+  if (field === "label") {
+    preset.label = event.target.value;
+    updatePresetOptionLabels(preset);
+    markDirty();
+    return;
+  }
+
+  if (field === "targetUrl") {
+    preset.targetUrl = event.target.value;
+    updateRulesUsingPreset(preset.id, preset.targetUrl);
+    updatePresetOptionLabels(preset);
+    markDirty();
+  }
+}
+
+function handlePresetClick(event) {
+  const action = event.target?.dataset?.action;
+
+  if (action !== "delete-preset") {
+    return;
+  }
+
+  const preset = getPresetFromElement(event.target);
+
+  if (preset) {
+    deletePreset(preset.id);
+  }
 }
 
 function handleRuleInput(event) {
@@ -231,6 +428,8 @@ function handleRuleInput(event) {
 
   if (rule) {
     rule.targetUrl = event.target.value;
+    rule.presetId = "";
+    syncRulePresetSelect(event.target, "");
     markDirty();
   }
 }
@@ -253,6 +452,11 @@ function handleRuleChange(event) {
   if (field === "mouseButton") {
     rule.mouseButton = normalizeMouseButton(event.target.value);
     markDirty();
+    return;
+  }
+
+  if (field === "presetId") {
+    applyPresetToRule(rule, event.target.value, event.target);
   }
 }
 
@@ -295,6 +499,77 @@ function deleteRule(ruleId) {
   rules = rules.filter((rule) => rule.id !== ruleId);
   renderRules();
   markDirty("ルールを削除しました。保存すると反映されます。");
+}
+
+function deletePreset(presetId) {
+  urlPresets = urlPresets.filter((preset) => preset.id !== presetId);
+
+  rules.forEach((rule) => {
+    if (rule.presetId === presetId) {
+      rule.presetId = "";
+    }
+  });
+
+  renderPresets();
+  renderRules();
+  markDirty("プリセットを削除しました。利用中のルールは直接入力に切り替えました。");
+}
+
+function applyPresetToRule(rule, presetId, select) {
+  const preset = getPresetById(presetId);
+  const card = select.closest("[data-rule-id]");
+  const urlInput = card?.querySelector("[data-field='targetUrl']");
+
+  if (!preset) {
+    rule.presetId = "";
+    syncRulePresetSelect(select, "");
+    markDirty();
+    return;
+  }
+
+  rule.presetId = preset.id;
+  rule.targetUrl = preset.targetUrl;
+
+  if (urlInput) {
+    urlInput.value = preset.targetUrl;
+    urlInput.removeAttribute("aria-invalid");
+  }
+
+  markDirty("プリセットを適用しました。保存すると反映されます。");
+}
+
+function updateRulesUsingPreset(presetId, targetUrl) {
+  rules.forEach((rule) => {
+    if (rule.presetId === presetId) {
+      rule.targetUrl = targetUrl;
+
+      const card = document.querySelector(`[data-rule-id="${CSS.escape(rule.id)}"]`);
+      const input = card?.querySelector("[data-field='targetUrl']");
+
+      if (input) {
+        input.value = targetUrl;
+      }
+    }
+  });
+}
+
+function updatePresetOptionLabels(preset) {
+  document.querySelectorAll("[data-field='presetId']").forEach((select) => {
+    Array.from(select.options).forEach((option) => {
+      if (option.value === preset.id) {
+        option.textContent = getPresetDisplayName(preset);
+      }
+    });
+  });
+}
+
+function syncRulePresetSelect(element, presetId) {
+  const card = element.closest("[data-rule-id]");
+  const select = card?.querySelector("[data-field='presetId']");
+
+  if (select) {
+    select.value = presetId;
+  }
 }
 
 function startKeyCapture(ruleId, button) {
@@ -375,11 +650,31 @@ function clearKeyCaptureSession() {
 }
 
 async function saveSettings() {
+  const normalizedPresets = [];
   const normalizedRules = [];
   clearValidationState();
 
+  for (const [index, preset] of urlPresets.entries()) {
+    const validationError = getPresetValidationError(preset, index);
+
+    if (validationError) {
+      showStatus(validationError.message, "error");
+      focusPresetField(preset.id, validationError.field);
+      return;
+    }
+
+    const normalizedPreset = normalizeUrlPreset(preset);
+
+    if (!normalizedPreset) {
+      showStatus(`プリセット ${index + 1} を確認してください。`, "error");
+      return;
+    }
+
+    normalizedPresets.push(normalizedPreset);
+  }
+
   for (const [index, rule] of rules.entries()) {
-    const validationError = getRuleValidationError(rule, index);
+    const validationError = getRuleValidationError(rule, index, normalizedPresets);
 
     if (validationError) {
       showStatus(validationError.message, "error");
@@ -387,7 +682,7 @@ async function saveSettings() {
       return;
     }
 
-    const normalizedRule = normalizeRule(rule);
+    const normalizedRule = normalizeRule(rule, normalizedPresets);
 
     if (!normalizedRule) {
       showStatus(`ルール ${index + 1} を確認してください。`, "error");
@@ -405,21 +700,38 @@ async function saveSettings() {
   }
 
   await chrome.storage.sync.set({
+    [STORAGE_KEYS.urlPresets]: normalizedPresets,
     [STORAGE_KEYS.rules]: normalizedRules,
     [STORAGE_KEYS.targetUrl]: normalizedRules[0].targetUrl,
     [STORAGE_KEYS.triggerType]: normalizedRules[0].triggerType,
     [STORAGE_KEYS.triggerKey]: normalizedRules[0].triggerKey
   });
 
+  urlPresets = normalizedPresets;
   rules = normalizedRules;
   hasUnsavedChanges = false;
+  renderPresets();
   renderRules();
   showStatus("保存しました。", "success");
 }
 
-function getRuleValidationError(rule, index) {
+function getPresetValidationError(preset, index) {
+  const presetNumber = index + 1;
+  const targetUrl = normalizeUrl(preset.targetUrl);
+
+  if (!isValidUrl(targetUrl)) {
+    return {
+      field: "targetUrl",
+      message: `プリセット ${presetNumber} のURLを確認してください。https:// または http:// から始まるURLが必要です。`
+    };
+  }
+
+  return null;
+}
+
+function getRuleValidationError(rule, index, presetList = urlPresets) {
   const ruleNumber = index + 1;
-  const targetUrl = normalizeUrl(rule.targetUrl);
+  const targetUrl = getRuleTargetUrl(rule, presetList);
   const triggerType = normalizeTriggerType(rule.triggerType);
 
   if (!isValidUrl(targetUrl)) {
@@ -443,6 +755,21 @@ function clearValidationState() {
   document.querySelectorAll("[aria-invalid='true']").forEach((element) => {
     element.removeAttribute("aria-invalid");
   });
+}
+
+function focusPresetField(presetId, field) {
+  const card = document.querySelector(`[data-preset-id="${CSS.escape(presetId)}"]`);
+
+  if (!card) {
+    return;
+  }
+
+  const element = card.querySelector(`[data-preset-field='${field}']`);
+
+  if (element) {
+    element.setAttribute("aria-invalid", "true");
+    element.focus();
+  }
 }
 
 function focusInvalidRuleField(ruleId, field) {
@@ -533,13 +860,45 @@ function getRuleFromElement(element) {
   return card ? rules.find((rule) => rule.id === card.dataset.ruleId) : null;
 }
 
+function getPresetFromElement(element) {
+  const card = element.closest("[data-preset-id]");
+  return card ? urlPresets.find((preset) => preset.id === card.dataset.presetId) : null;
+}
+
+function getPresetById(presetId, presetList = urlPresets) {
+  return presetList.find((preset) => preset.id === presetId) || null;
+}
+
+function getRulePresetId(rule) {
+  return getPresetById(rule.presetId) ? rule.presetId : "";
+}
+
+function getRuleTargetUrl(rule, presetList = urlPresets) {
+  const preset = getPresetById(rule.presetId, presetList);
+  return normalizeUrl(preset ? preset.targetUrl : rule.targetUrl);
+}
+
+function getPresetDisplayName(preset) {
+  return `${preset.label || getDefaultPresetLabel(preset.targetUrl)} - ${preset.targetUrl}`;
+}
+
+function focusPresetInput(presetId, field) {
+  const card = document.querySelector(`[data-preset-id="${CSS.escape(presetId)}"]`);
+  const element = card?.querySelector(`[data-preset-field='${field}']`);
+
+  if (element) {
+    element.focus();
+  }
+}
+
 function createRule() {
   return {
     id: createRuleId(),
     targetUrl: DEFAULT_URL,
     triggerType: "key",
     mouseButton: DEFAULT_MOUSE_BUTTON,
-    triggerKey: null
+    triggerKey: null,
+    presetId: ""
   };
 }
 
@@ -549,16 +908,26 @@ function createDefaultRule() {
     targetUrl: DEFAULT_URL,
     triggerType: "mouse",
     mouseButton: DEFAULT_MOUSE_BUTTON,
-    triggerKey: null
+    triggerKey: null,
+    presetId: ""
   };
 }
 
-function normalizeRule(rule) {
+function createUrlPreset() {
+  return {
+    id: createPresetId(),
+    label: "",
+    targetUrl: ""
+  };
+}
+
+function normalizeRule(rule, presetList = urlPresets) {
   if (!rule || typeof rule !== "object") {
     return null;
   }
 
-  const targetUrl = normalizeUrl(rule.targetUrl);
+  const presetId = normalizePresetId(rule.presetId, presetList);
+  const targetUrl = getRuleTargetUrl({ ...rule, presetId }, presetList);
 
   if (!isValidUrl(targetUrl)) {
     return null;
@@ -576,7 +945,26 @@ function normalizeRule(rule) {
     targetUrl,
     triggerType,
     mouseButton: normalizeMouseButton(rule.mouseButton),
-    triggerKey
+    triggerKey,
+    presetId
+  };
+}
+
+function normalizeUrlPreset(preset) {
+  if (!preset || typeof preset !== "object") {
+    return null;
+  }
+
+  const targetUrl = normalizeUrl(preset.targetUrl);
+
+  if (!isValidUrl(targetUrl)) {
+    return null;
+  }
+
+  return {
+    id: typeof preset.id === "string" && preset.id ? preset.id : createPresetId(),
+    label: normalizePresetLabel(preset.label, targetUrl),
+    targetUrl
   };
 }
 
@@ -603,6 +991,28 @@ function normalizeTriggerType(value) {
 
 function normalizeMouseButton(value) {
   return value === "3" || value === "4" ? value : DEFAULT_MOUSE_BUTTON;
+}
+
+function normalizePresetId(value, presetList = urlPresets) {
+  if (typeof value !== "string" || !value) {
+    return "";
+  }
+
+  return presetList.some((preset) => preset.id === value) ? value : "";
+}
+
+function normalizePresetLabel(value, targetUrl) {
+  const label = typeof value === "string" ? value.trim() : "";
+  return label || getDefaultPresetLabel(targetUrl);
+}
+
+function getDefaultPresetLabel(targetUrl) {
+  try {
+    const url = new URL(targetUrl);
+    return url.hostname || "URLプリセット";
+  } catch {
+    return "URLプリセット";
+  }
 }
 
 function normalizeTriggerKey(value) {
@@ -667,6 +1077,10 @@ function formatBaseKey(key, code) {
 
 function createRuleId() {
   return `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createPresetId() {
+  return `preset-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function markDirty(message = "未保存の変更があります。保存すると反映されます。") {

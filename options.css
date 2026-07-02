@@ -64,6 +64,7 @@ p {
   gap: 16px;
 }
 
+.presetsHeader,
 .rulesHeader,
 .ruleHeader {
   display: flex;
@@ -72,11 +73,13 @@ p {
   gap: 16px;
 }
 
+.presetsList,
 .rulesList {
   display: grid;
   gap: 14px;
 }
 
+.presetCard,
 .ruleCard {
   display: grid;
   gap: 14px;
@@ -87,15 +90,23 @@ p {
 }
 
 .field,
+.urlSettings,
 .keySettings {
   display: grid;
   gap: 8px;
+}
+
+.presetFields {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.42fr) minmax(180px, 1fr);
+  gap: 10px;
 }
 
 .label {
   font-weight: 700;
 }
 
+input[type="text"],
 input[type="url"],
 select {
   width: 100%;
@@ -108,6 +119,7 @@ select {
   font: inherit;
 }
 
+input[type="text"]:focus,
 input[type="url"]:focus,
 select:focus,
 button:focus-visible {
@@ -139,6 +151,15 @@ button:focus-visible {
 .hint {
   color: #6b7280;
   font-size: 13px;
+}
+
+.emptyState {
+  padding: 12px;
+  border: 1px dashed #b8c2d2;
+  border-radius: 6px;
+  color: #6b7280;
+  font-size: 13px;
+  background: #fbfcff;
 }
 
 .actions {
@@ -229,6 +250,7 @@ button.compactButton {
     padding: 20px;
   }
 
+  .presetsHeader,
   .rulesHeader,
   .ruleHeader,
   .actions {
@@ -237,6 +259,10 @@ button.compactButton {
   }
 
   .keyCapture {
+    grid-template-columns: 1fr;
+  }
+
+  .presetFields {
     grid-template-columns: 1fr;
   }
 

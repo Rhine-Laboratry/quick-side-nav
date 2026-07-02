@@ -1,14 +1,14 @@
 # Chrome Web Store readiness: Quick Side Nav
 
-Last checked: 2026-07-01
+Last checked: 2026-07-02
 
 ## Current extension behavior
 
 - Manifest V3 extension named `Quick Side Nav`, version `1.2.1`.
 - Single user-facing purpose: map user-configured side mouse buttons or key combinations to user-configured `http://` / `https://` URLs, then navigate the current active tab.
 - Popup lets the user turn monitoring ON/OFF and open saved rules immediately.
-- Options page lets the user add, delete, and save multiple trigger rules.
-- Rules and enabled state are stored in `chrome.storage.sync` under settings such as `isEnabled`, `rules`, `targetUrl`, `triggerType`, and `triggerKey`.
+- Options page lets the user add, delete, and save multiple trigger rules and reusable URL presets.
+- Rules, URL presets, and enabled state are stored in `chrome.storage.sync` under settings such as `isEnabled`, `rules`, `urlPresets`, `targetUrl`, `triggerType`, and `triggerKey`.
 - Default destination URL is `https://example.com/` until the user changes it.
 - Content script runs on top-level `http://*/*` and `https://*/*` pages at `document_start`.
 - Content script listens for trusted side-button mouse events and configured keydown events. It ignores editable fields such as inputs, textareas, selects, and contenteditable elements.
@@ -36,6 +36,7 @@ Quick Side Nav は、通常のWebページ上でよく使う移動先URLをす�
 - マウスのサイドボタン、戻る側、進む側をトリガーに設定
 - 任意のキー、または Ctrl / Alt / Shift / Meta と組み合わせたキーをトリガーに設定
 - ルールごとに移動先URLを保存
+- よく使う移動先URLをプリセットとして保存し、各ルールから選択
 - 拡張機能のポップアップから監視をON/OFF
 - 登録済みルールをポップアップから手動で開く
 
@@ -61,7 +62,7 @@ Productivity
 
 ### `storage`
 
-ユーザーが設定した監視ON/OFF状態、トリガールール、キー設定、移動先URLを保存するために使用します。設定は `chrome.storage.sync` に保存され、拡張機能の動作設定以外には使用しません。
+ユーザーが設定した監視ON/OFF状態、トリガールール、キー設定、移動先URL、URLプリセットを保存するために使用します。設定は `chrome.storage.sync` に保存され、拡張機能の動作設定以外には使用しません。
 
 ### `http://*/*` and `https://*/*` content script access
 
@@ -78,7 +79,7 @@ Productivity
 Use this as the starting point for the dashboard privacy fields and privacy policy page.
 
 ```text
-Quick Side Nav stores only the settings needed to provide its core feature: enabled/disabled state, trigger rules, keyboard shortcut metadata, mouse button selection, and user-entered destination URLs. These settings are stored with Chrome storage so the extension can apply the user's rules.
+Quick Side Nav stores only the settings needed to provide its core feature: enabled/disabled state, trigger rules, keyboard shortcut metadata, mouse button selection, and user-entered destination URLs including URL presets. These settings are stored with Chrome storage so the extension can apply the user's rules.
 
 Quick Side Nav does not collect, sell, transfer, or share personal information. It does not collect page content, form input, browsing history, authentication information, financial information, health information, location, or personal communications. It does not use analytics, advertising, tracking, or remote code.
 
