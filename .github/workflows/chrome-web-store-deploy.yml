@@ -110,22 +110,35 @@ jobs:
         run: |
           set -euo pipefail
 
-          response="$(
-            curl -sS --fail-with-body -X POST "https://oauth2.googleapis.com/token" \
+          if ! response="$(
+            curl -sS -X POST "https://oauth2.googleapis.com/token" \
               --data-urlencode "client_id=${CWS_CLIENT_ID}" \
               --data-urlencode "client_secret=${CWS_CLIENT_SECRET}" \
               --data-urlencode "refresh_token=${CWS_REFRESH_TOKEN}" \
               --data-urlencode "grant_type=refresh_token"
-          )"
+          )"; then
+            echo "Failed to reach the Google OAuth token endpoint." >&2
+            exit 1
+          fi
 
           access_token="$(
             node -e '
               let body = "";
               process.stdin.on("data", chunk => body += chunk);
               process.stdin.on("end", () => {
-                const parsed = JSON.parse(body);
+                let parsed;
+                try {
+                  parsed = JSON.parse(body);
+                } catch {
+                  console.error("Google OAuth returned a non-JSON response.");
+                  process.exit(1);
+                }
                 if (!parsed.access_token) {
-                  console.error(body);
+                  const code = typeof parsed.error === "string" ? parsed.error : "unknown_error";
+                  const description = typeof parsed.error_description === "string"
+                    ? `: ${parsed.error_description}`
+                    : "";
+                  console.error(`Google OAuth token request failed (${code})${description}`);
                   process.exit(1);
                 }
                 process.stdout.write(parsed.access_token);
