@@ -1,6 +1,7 @@
 const DEFAULT_URL = "https://example.com/";
 const DEFAULT_TRIGGER_TYPE = "mouse";
 const DEFAULT_MOUSE_BUTTON = "side";
+const MAX_URL_LENGTH = 2048;
 
 const STORAGE_KEYS = {
   targetUrl: "targetUrl",
@@ -63,11 +64,7 @@ async function getState() {
 
 function getRulesFromStorage(result) {
   if (Array.isArray(result[STORAGE_KEYS.rules])) {
-    const rules = result[STORAGE_KEYS.rules].map(normalizeRule).filter(Boolean);
-
-    if (rules.length > 0) {
-      return rules;
-    }
+    return result[STORAGE_KEYS.rules].map(normalizeRule).filter(Boolean);
   }
 
   const legacyRule = normalizeRule({
@@ -78,7 +75,7 @@ function getRulesFromStorage(result) {
     triggerKey: result[STORAGE_KEYS.triggerKey]
   });
 
-  return legacyRule ? [legacyRule] : [createDefaultRule()];
+  return legacyRule ? [legacyRule] : [];
 }
 
 function renderRules(rules) {
@@ -168,9 +165,9 @@ function normalizeRule(rule) {
     return null;
   }
 
-  const targetUrl = normalizeUrl(rule.targetUrl);
+  const targetUrl = normalizeValidUrl(rule.targetUrl);
 
-  if (!isValidUrl(targetUrl)) {
+  if (!targetUrl) {
     return null;
   }
 
@@ -190,30 +187,32 @@ function normalizeRule(rule) {
   };
 }
 
-function createDefaultRule() {
-  return {
-    id: "default-side-button-rule",
-    targetUrl: DEFAULT_URL,
-    triggerType: "mouse",
-    mouseButton: DEFAULT_MOUSE_BUTTON,
-    triggerKey: null
-  };
-}
-
 function normalizeUrl(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
 function isValidUrl(value) {
-  if (!value) {
-    return false;
+  return Boolean(normalizeValidUrl(value));
+}
+
+function normalizeValidUrl(value) {
+  const targetUrl = normalizeUrl(value);
+
+  if (!targetUrl || targetUrl.length > MAX_URL_LENGTH || !/^https?:\/\//i.test(targetUrl)) {
+    return "";
   }
 
   try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:";
+    const url = new URL(targetUrl);
+
+    if ((url.protocol !== "https:" && url.protocol !== "http:") || url.username || url.password) {
+      return "";
+    }
+
+    const normalizedUrl = url.href;
+    return normalizedUrl.length <= MAX_URL_LENGTH ? normalizedUrl : "";
   } catch {
-    return false;
+    return "";
   }
 }
 

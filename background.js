@@ -16,6 +16,7 @@ const MESSAGE_TYPES = {
 const DEFAULT_TRIGGER_TYPE = "mouse";
 const DEFAULT_MOUSE_BUTTON = "side";
 const ENABLED_BADGE_COLOR = "#047857";
+const MAX_URL_LENGTH = 2048;
 
 chrome.runtime.onInstalled.addListener(() => {
   syncActionBadge();
@@ -105,16 +106,13 @@ async function getSettings() {
 
 function getRulesFromStorage(result) {
   if (Array.isArray(result[STORAGE_KEYS.rules])) {
-    const rules = result[STORAGE_KEYS.rules]
+    return result[STORAGE_KEYS.rules]
       .map(normalizeRule)
       .filter(Boolean);
-
-    if (rules.length > 0) {
-      return rules;
-    }
   }
 
-  return [createLegacyRule(result)];
+  const legacyRule = createLegacyRule(result);
+  return legacyRule ? [legacyRule] : [];
 }
 
 function createLegacyRule(result) {
@@ -123,21 +121,11 @@ function createLegacyRule(result) {
 
   return normalizeRule({
     id: "legacy-default-rule",
-    targetUrl: isValidUrl(targetUrl) ? targetUrl : DEFAULT_URL,
+    targetUrl,
     triggerType,
     mouseButton: DEFAULT_MOUSE_BUTTON,
     triggerKey: normalizeTriggerKey(result[STORAGE_KEYS.triggerKey])
-  }) || createDefaultRule();
-}
-
-function createDefaultRule() {
-  return {
-    id: "default-side-button-rule",
-    targetUrl: DEFAULT_URL,
-    triggerType: "mouse",
-    mouseButton: DEFAULT_MOUSE_BUTTON,
-    triggerKey: null
-  };
+  });
 }
 
 async function openUrlInCurrentTab(url) {
@@ -198,9 +186,9 @@ function normalizeRule(rule) {
     return null;
   }
 
-  const targetUrl = normalizeUrl(rule.targetUrl);
+  const targetUrl = normalizeValidUrl(rule.targetUrl);
 
-  if (!isValidUrl(targetUrl)) {
+  if (!targetUrl) {
     return null;
   }
 
@@ -225,15 +213,27 @@ function normalizeUrl(value) {
 }
 
 function isValidUrl(value) {
-  if (!value) {
-    return false;
+  return Boolean(normalizeValidUrl(value));
+}
+
+function normalizeValidUrl(value) {
+  const targetUrl = normalizeUrl(value);
+
+  if (!targetUrl || targetUrl.length > MAX_URL_LENGTH || !/^https?:\/\//i.test(targetUrl)) {
+    return "";
   }
 
   try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:";
+    const url = new URL(targetUrl);
+
+    if ((url.protocol !== "https:" && url.protocol !== "http:") || url.username || url.password) {
+      return "";
+    }
+
+    const normalizedUrl = url.href;
+    return normalizedUrl.length <= MAX_URL_LENGTH ? normalizedUrl : "";
   } catch {
-    return false;
+    return "";
   }
 }
 

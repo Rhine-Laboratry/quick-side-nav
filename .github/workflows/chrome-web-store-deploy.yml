@@ -25,6 +25,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate release branch and manifest version
+        id: release
         shell: bash
         run: |
           set -euo pipefail
@@ -41,11 +42,15 @@ jobs:
             exit 1
           fi
 
-          minor="${version%.*}"
-          if [[ "$branch" != "v$minor" ]]; then
-            echo "Release branch and manifest version do not match. Branch: $branch, manifest version: $version, expected branch: v$minor" >&2
+          IFS='.' read -r major minor _ <<< "$version"
+          expected_branch="v${major}.${minor}"
+          if [[ "$branch" != "$expected_branch" ]]; then
+            echo "Release branch and manifest version do not match. Branch: $branch, manifest version: $version, expected branch: $expected_branch" >&2
             exit 1
           fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "package_file=dist/quick-side-nav-v${version}.zip" >> "$GITHUB_OUTPUT"
 
       - name: Validate source files
         shell: bash
@@ -57,6 +62,10 @@ jobs:
           node --check popup.js
           node --check options.js
 
+      - name: Run extension tests
+        shell: bash
+        run: node --test tests/*.test.js
+
       - name: Build extension ZIP
         shell: pwsh
         run: ./scripts/package-extension.ps1 -OutputDirectory dist
@@ -65,7 +74,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: chrome-extension-package
-          path: dist/*.zip
+          path: ${{ steps.release.outputs.package_file }}
           if-no-files-found: error
 
       - name: Verify Chrome Web Store secrets
@@ -133,21 +142,119 @@ jobs:
           CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
           CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
           ACCESS_TOKEN: ${{ steps.token.outputs.access_token }}
+          EXTENSION_VERSION: ${{ steps.release.outputs.version }}
+          PACKAGE_FILE: ${{ steps.release.outputs.package_file }}
         run: |
           set -euo pipefail
 
-          package_file="$(find dist -maxdepth 1 -name 'quick-side-nav-v*.zip' -type f | sort | head -n 1)"
-          if [[ -z "$package_file" ]]; then
-            echo "No package file found in dist/." >&2
+          if [[ ! -f "$PACKAGE_FILE" ]]; then
+            echo "Expected package file was not created: $PACKAGE_FILE" >&2
             exit 1
           fi
 
-          curl -sS --fail-with-body \
-            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-            -H "Content-Type: application/zip" \
-            -X POST \
-            -T "$package_file" \
-            "https://chromewebstore.googleapis.com/upload/v2/publishers/${CWS_PUBLISHER_ID}/items/${CWS_EXTENSION_ID}:upload"
+          upload_response="$(
+            curl -sS --fail-with-body \
+              -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+              -H "Content-Type: application/zip" \
+              -X POST \
+              -T "$PACKAGE_FILE" \
+              "https://chromewebstore.googleapis.com/upload/v2/publishers/${CWS_PUBLISHER_ID}/items/${CWS_EXTENSION_ID}:upload"
+          )" || {
+            echo "Chrome Web Store upload request failed. Response: ${upload_response:-<empty>}" >&2
+            exit 1
+          }
+
+          upload_state="$(
+            node -e '
+              let body = "";
+              process.stdin.on("data", chunk => body += chunk);
+              process.stdin.on("end", () => {
+                const parsed = JSON.parse(body);
+                if (typeof parsed.uploadState !== "string") {
+                  console.error(body);
+                  process.exit(1);
+                }
+                process.stdout.write(parsed.uploadState);
+              });
+            ' <<< "$upload_response"
+          )" || {
+            echo "Chrome Web Store upload returned an invalid response: $upload_response" >&2
+            exit 1
+          }
+
+          if [[ "$upload_state" == "SUCCEEDED" ]]; then
+            uploaded_version="$(
+              node -e '
+                let body = "";
+                process.stdin.on("data", chunk => body += chunk);
+                process.stdin.on("end", () => {
+                  const parsed = JSON.parse(body);
+                  process.stdout.write(parsed.crxVersion || "");
+                });
+              ' <<< "$upload_response"
+            )"
+
+            if [[ -n "$uploaded_version" && "$uploaded_version" != "$EXTENSION_VERSION" ]]; then
+              echo "Chrome Web Store accepted unexpected version $uploaded_version; expected $EXTENSION_VERSION. Response: $upload_response" >&2
+              exit 1
+            fi
+
+            echo "Chrome Web Store upload succeeded for version $EXTENSION_VERSION."
+            exit 0
+          fi
+
+          if [[ "$upload_state" != "IN_PROGRESS" && "$upload_state" != "UPLOAD_IN_PROGRESS" ]]; then
+            echo "Chrome Web Store upload did not succeed. State: $upload_state. Response: $upload_response" >&2
+            exit 1
+          fi
+
+          status_response="$upload_response"
+          for attempt in {1..30}; do
+            sleep 10
+            status_response="$(
+              curl -sS --fail-with-body \
+                -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                "https://chromewebstore.googleapis.com/v2/publishers/${CWS_PUBLISHER_ID}/items/${CWS_EXTENSION_ID}:fetchStatus"
+            )" || {
+              echo "Chrome Web Store status request failed on attempt $attempt. Response: ${status_response:-<empty>}" >&2
+              exit 1
+            }
+
+            upload_state="$(
+              node -e '
+                let body = "";
+                process.stdin.on("data", chunk => body += chunk);
+                process.stdin.on("end", () => {
+                  const parsed = JSON.parse(body);
+                  if (typeof parsed.lastAsyncUploadState !== "string") {
+                    console.error(body);
+                    process.exit(1);
+                  }
+                  process.stdout.write(parsed.lastAsyncUploadState);
+                });
+              ' <<< "$status_response"
+            )" || {
+              echo "Chrome Web Store status returned an invalid response: $status_response" >&2
+              exit 1
+            }
+
+            case "$upload_state" in
+              SUCCEEDED)
+                echo "Chrome Web Store upload succeeded for version $EXTENSION_VERSION after $attempt status check(s)."
+                exit 0
+                ;;
+              IN_PROGRESS|UPLOAD_IN_PROGRESS)
+                echo "Chrome Web Store upload is still in progress (attempt $attempt of 30)."
+                ;;
+              *)
+                echo "Chrome Web Store upload failed. State: $upload_state. Response: $status_response" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          echo "Chrome Web Store upload did not finish after 30 status checks. Last response: $status_response" >&2
+          exit 1
 
       - name: Submit for Chrome Web Store review
         shell: bash

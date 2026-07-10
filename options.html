@@ -15,28 +15,32 @@
       </p>
 
       <form id="settingsForm" class="form" novalidate>
-        <section class="presetsHeader" aria-label="URLプリセット">
-          <div>
-            <h2>URLプリセット</h2>
-            <p class="hint">よく使う移動先URLを保存して、各ルールから選べます。</p>
+        <section class="settingsSection" aria-labelledby="presetsHeading">
+          <div class="presetsHeader">
+            <div>
+              <h2 id="presetsHeading">URLプリセット</h2>
+              <p class="hint">よく使う移動先URLを保存して、各ルールから選べます。</p>
+            </div>
+            <button id="addPresetButton" class="secondaryButton compactButton" type="button">プリセットを追加</button>
           </div>
-          <button id="addPresetButton" class="secondaryButton compactButton" type="button">プリセットを追加</button>
+
+          <div id="presetsList" class="presetsList"></div>
         </section>
 
-        <div id="presetsList" class="presetsList"></div>
-
-        <section class="rulesHeader" aria-label="起動ルール">
-          <div>
-            <h2>起動ルール</h2>
-            <p class="hint">例：QキーでURL 1へ移動、サイドボタンでURL 2へ移動。</p>
+        <section class="settingsSection" aria-labelledby="rulesHeading">
+          <div class="rulesHeader">
+            <div>
+              <h2 id="rulesHeading">起動ルール</h2>
+              <p class="hint">例：QキーでURL 1へ移動、サイドボタンでURL 2へ移動。</p>
+            </div>
+            <button id="addRuleButton" class="secondaryButton compactButton" type="button">ルールを追加</button>
           </div>
-          <button id="addRuleButton" class="secondaryButton compactButton" type="button">ルールを追加</button>
-        </section>
 
-        <div id="rulesList" class="rulesList"></div>
+          <div id="rulesList" class="rulesList"></div>
+        </section>
 
         <div class="actions">
-          <button type="submit">保存</button>
+          <button id="saveButton" type="submit">保存</button>
           <p id="statusMessage" class="status" role="status" aria-live="polite"></p>
         </div>
       </form>

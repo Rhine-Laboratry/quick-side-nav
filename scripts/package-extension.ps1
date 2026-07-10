@@ -15,10 +15,11 @@ if ($version -notmatch "^\d+\.\d+\.\d+(\.\d+)?$") {
 }
 
 if ($env:GITHUB_REF_NAME -match "^v(?<minor>\d+\.\d+)$") {
-  $expectedPrefix = "$($Matches.minor)."
+  $versionParts = $version.Split(".")
+  $expectedBranch = "v$($versionParts[0]).$($versionParts[1])"
 
-  if (-not $version.StartsWith($expectedPrefix)) {
-    throw "Release branch $env:GITHUB_REF_NAME must match manifest version $version. Expected version prefix: $expectedPrefix"
+  if ($env:GITHUB_REF_NAME -ne $expectedBranch) {
+    throw "Release branch $env:GITHUB_REF_NAME must match manifest version $version. Expected branch: $expectedBranch"
   }
 }
 
@@ -58,8 +59,13 @@ foreach ($iconPath in ($manifestIconPaths | Select-Object -Unique)) {
 }
 
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
-$zipPath = Join-Path $OutputDirectory "quick-side-nav-v$version.zip"
-Remove-Item -Force -LiteralPath $zipPath -ErrorAction SilentlyContinue
+$resolvedOutputDirectory = (Resolve-Path -LiteralPath $OutputDirectory).Path
+
+Get-ChildItem -LiteralPath $resolvedOutputDirectory -File -Filter "quick-side-nav-v*.zip" | ForEach-Object {
+  Remove-Item -Force -LiteralPath $_.FullName
+}
+
+$zipPath = Join-Path $resolvedOutputDirectory "quick-side-nav-v$version.zip"
 
 Compress-Archive -LiteralPath $packageEntries -DestinationPath $zipPath -Force
 
@@ -69,6 +75,12 @@ try {
 
   if (-not (Test-Path -LiteralPath (Join-Path $tempDir "manifest.json") -PathType Leaf)) {
     throw "Package validation failed: manifest.json is not at the ZIP root."
+  }
+
+  $packagedManifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $tempDir "manifest.json") | ConvertFrom-Json
+  $packagedVersion = [string]$packagedManifest.version
+  if ($packagedVersion -ne $version) {
+    throw "Package validation failed: ZIP manifest version $packagedVersion does not match source manifest version $version."
   }
 
   foreach ($iconPath in ($manifestIconPaths | Select-Object -Unique)) {

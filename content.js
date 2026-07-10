@@ -3,6 +3,7 @@ const COOLDOWN_MS = 300;
 const MESSAGE_TYPE = "open-configured-url";
 const DEFAULT_TRIGGER_TYPE = "mouse";
 const DEFAULT_MOUSE_BUTTON = "side";
+const MAX_URL_LENGTH = 2048;
 const LISTENER_OPTIONS = {
   capture: true,
   passive: false
@@ -102,11 +103,7 @@ async function loadSettings() {
 
 function getRulesFromStorage(result) {
   if (Array.isArray(result.rules)) {
-    const rules = result.rules.map(normalizeRule).filter(Boolean);
-
-    if (rules.length > 0) {
-      return rules;
-    }
+    return result.rules.map(normalizeRule).filter(Boolean);
   }
 
   const legacyRule = normalizeRule({
@@ -117,7 +114,7 @@ function getRulesFromStorage(result) {
     triggerKey: result.triggerKey
   });
 
-  return legacyRule ? [legacyRule] : [createDefaultRule()];
+  return legacyRule ? [legacyRule] : [];
 }
 
 function hasMatchingMouseRule(button) {
@@ -183,6 +180,10 @@ function normalizeRule(rule) {
     return null;
   }
 
+  if (!normalizeValidUrl(rule.targetUrl)) {
+    return null;
+  }
+
   const triggerType = normalizeTriggerType(rule.triggerType);
   const triggerKey = normalizeTriggerKey(rule.triggerKey);
 
@@ -197,12 +198,29 @@ function normalizeRule(rule) {
   };
 }
 
-function createDefaultRule() {
-  return {
-    triggerType: "mouse",
-    mouseButton: DEFAULT_MOUSE_BUTTON,
-    triggerKey: null
-  };
+function normalizeUrl(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeValidUrl(value) {
+  const targetUrl = normalizeUrl(value);
+
+  if (!targetUrl || targetUrl.length > MAX_URL_LENGTH || !/^https?:\/\//i.test(targetUrl)) {
+    return "";
+  }
+
+  try {
+    const url = new URL(targetUrl);
+
+    if ((url.protocol !== "https:" && url.protocol !== "http:") || url.username || url.password) {
+      return "";
+    }
+
+    const normalizedUrl = url.href;
+    return normalizedUrl.length <= MAX_URL_LENGTH ? normalizedUrl : "";
+  } catch {
+    return "";
+  }
 }
 
 function normalizeTriggerType(value) {

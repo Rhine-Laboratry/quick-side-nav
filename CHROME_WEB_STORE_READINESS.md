@@ -1,18 +1,19 @@
 # Chrome Web Store readiness: Quick Side Nav
 
-Last checked: 2026-07-02
+Last checked: 2026-07-10
 
 ## Current extension behavior
 
-- Manifest V3 extension named `Quick Side Nav`, version `1.2.1`.
+- Manifest V3 extension named `Quick Side Nav`, version `1.3.0`.
 - Single user-facing purpose: map user-configured side mouse buttons or key combinations to user-configured `http://` / `https://` URLs, then navigate the current active tab.
 - Popup lets the user turn monitoring ON/OFF and open saved rules immediately.
-- Options page lets the user add, delete, and save multiple trigger rules and reusable URL presets.
+- Options page lets the user add, delete, and save multiple trigger rules and reusable URL presets. A rule can create a preset from its current URL, and rules linked to a preset update with that preset.
 - Rules, URL presets, and enabled state are stored in `chrome.storage.sync` under settings such as `isEnabled`, `rules`, `urlPresets`, `targetUrl`, `triggerType`, and `triggerKey`.
 - Default destination URL is `https://example.com/` until the user changes it.
 - Content script runs on top-level `http://*/*` and `https://*/*` pages at `document_start`.
 - Content script listens for trusted side-button mouse events and configured keydown events. It ignores editable fields such as inputs, textareas, selects, and contenteditable elements.
 - Background service worker receives trigger messages, checks saved settings, and navigates the active tab to the matching saved URL.
+- Destination URLs must use an explicit `http://` or `https://` scheme, are limited to 2,048 characters, and cannot contain embedded usernames or passwords.
 - No analytics, remote code, account login, payment, or external server communication is implemented.
 
 ## Chrome Web Store listing copy
@@ -37,6 +38,7 @@ Quick Side Nav は、通常のWebページ上でよく使う移動先URLをす�
 - 任意のキー、または Ctrl / Alt / Shift / Meta と組み合わせたキーをトリガーに設定
 - ルールごとに移動先URLを保存
 - よく使う移動先URLをプリセットとして保存し、各ルールから選択
+- 入力済みのルールURLからプリセットを作成し、プリセットの変更を利用中ルールへ連動
 - 拡張機能のポップアップから監視をON/OFF
 - 登録済みルールをポップアップから手動で開く
 
@@ -124,10 +126,11 @@ Known expected limits: the extension does not run on chrome:// pages, the Chrome
 
 ## Required dashboard assets checklist
 
-Current repo/package state: `manifest.json` declares `icons/icon-16.png`, `icons/icon-32.png`, `icons/icon-48.png`, and `icons/icon-128.png`. The PNG files are present in `icons/`. Store dashboard assets are present in `store-assets/`. `quick-side-nav.zip` has been rebuilt for version `1.2.1`.
+Current repo/package state: `manifest.json` declares `icons/icon-16.png`, `icons/icon-32.png`, `icons/icon-48.png`, and `icons/icon-128.png`. The PNG files are present in `icons/`. Store dashboard assets are present in `store-assets/`. `dist/quick-side-nav-v1.3.0.zip` was rebuilt and verified from the current source.
 
 - [x] Create the declared icon PNG files, including the required 128x128 extension/store icon.
 - [x] At least one 1280x800 or 640x400 screenshot: `store-assets/screenshot-options-1280x800.png`.
+- [ ] Refresh the options screenshot after release to show the new preset controls. The existing screenshot still shows the rule workflow but predates the preset UI.
 - [x] 440x280 small promotional tile PNG or JPEG: `store-assets/promo-small-440x280.png`.
 - [x] Privacy policy draft: `PRIVACY.md`. Host this text at a public URL if the dashboard requires a privacy policy URL.
 - [ ] Optional 1400x560 marquee promotional tile for better listing presentation.
@@ -138,7 +141,8 @@ Current repo/package state: `manifest.json` declares `icons/icon-16.png`, `icons
 - [x] Load unpacked extension in Chrome from the repo folder.
 - [x] Confirm `manifest.json` is UTF-8 and valid JSON.
 - [x] Confirm all files referenced by `manifest.json`, especially `icons/icon-*.png`, exist.
-- [x] Rebuild `quick-side-nav.zip` from the current workspace after the manifest and asset updates.
+- [x] Run the options migration, preset, URL validation, sync quota, save success/failure, and runtime URL safety tests (18 passing tests).
+- [x] Rebuild `dist/quick-side-nav-v1.3.0.zip` from the current workspace and verify the packaged manifest and `options.js` against the source.
 - [x] Confirm the package does not include `.git`, local notes, store dashboard assets, or build artifacts that are not needed by the extension.
 - [x] Confirm the Web Store listing copy matches the actual packaged version.
 - [x] Confirm the privacy declaration says only what the current code does.

@@ -8,7 +8,7 @@ Quick Side Nav は個人情報を収集、送信、販売、共有しません�
 
 - 入力監視が有効かどうか
 - ユーザーが設定した起動ルール
-- ユーザーが入力した移動先URL
+- ユーザーが入力した移動先URLとURLプリセット名
 
 これらの設定は `chrome.storage.sync` に保存され、Chrome にログインしているブラウザプロファイル間で同期される場合があります。開発者または開発者が管理するサーバーへ送信されることはありません。
 
@@ -24,7 +24,7 @@ The extension stores only the settings needed to provide its single purpose:
 
 - whether input monitoring is enabled
 - trigger rules selected by the user
-- destination URLs entered by the user
+- destination URLs and URL preset names entered by the user
 
 These settings are saved with `chrome.storage.sync` so Chrome can synchronize them for the signed-in browser profile. They are not sent to the developer or to any developer-controlled server.
 
