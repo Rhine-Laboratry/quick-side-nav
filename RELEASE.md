@@ -63,6 +63,8 @@ https://www.googleapis.com/auth/chromewebstore
 
 For a manual upload-only run, open the `Chrome Web Store deploy` workflow in GitHub Actions, choose the release branch, and set `publish` to `false`.
 
+If an upload succeeds but submission fails because dashboard metadata is incomplete, save the required metadata in the Chrome Web Store Developer Dashboard, then run the workflow manually with `publish_only=true`. This retries only the review submission and does not rebuild or re-upload the existing package.
+
 ## Package contents
 
 The release ZIP contains only the extension runtime files and supporting public docs:
