@@ -33,6 +33,8 @@ $packageEntries = @(
   "popup.html",
   "popup.js",
   "popup.css",
+  "i18n.js",
+  "_locales",
   "README.md",
   "PRIVACY.md",
   "icons"
@@ -55,6 +57,23 @@ $manifest.action.default_icon.PSObject.Properties | ForEach-Object {
 foreach ($iconPath in ($manifestIconPaths | Select-Object -Unique)) {
   if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
     throw "Manifest references missing icon: $iconPath"
+  }
+}
+
+$defaultLocale = [string]$manifest.default_locale
+if ([string]::IsNullOrWhiteSpace($defaultLocale)) {
+  throw "manifest.json must declare default_locale."
+}
+
+$defaultMessagesPath = Join-Path "_locales" (Join-Path $defaultLocale "messages.json")
+if (-not (Test-Path -LiteralPath $defaultMessagesPath -PathType Leaf)) {
+  throw "Default locale messages are missing: $defaultMessagesPath"
+}
+
+$defaultMessages = Get-Content -Raw -Encoding UTF8 -LiteralPath $defaultMessagesPath | ConvertFrom-Json
+foreach ($messageName in @("extensionName", "extensionDescription")) {
+  if (-not $defaultMessages.PSObject.Properties[$messageName]) {
+    throw "Default locale is missing required message: $messageName"
   }
 }
 
@@ -87,6 +106,15 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $tempDir $iconPath) -PathType Leaf)) {
       throw "Package validation failed: missing icon in ZIP: $iconPath"
     }
+  }
+
+  foreach ($locale in @("en", "ja")) {
+    $messagesPath = Join-Path $tempDir (Join-Path "_locales" (Join-Path $locale "messages.json"))
+    if (-not (Test-Path -LiteralPath $messagesPath -PathType Leaf)) {
+      throw "Package validation failed: missing locale messages in ZIP: $locale"
+    }
+
+    Get-Content -Raw -Encoding UTF8 -LiteralPath $messagesPath | ConvertFrom-Json | Out-Null
   }
 } finally {
   Remove-Item -Recurse -Force -LiteralPath $tempDir -ErrorAction SilentlyContinue

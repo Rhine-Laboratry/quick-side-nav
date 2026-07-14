@@ -1,27 +1,24 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Quick Side Nav 設定</title>
+    <title data-i18n="optionsTitle">Quick Side Nav Settings</title>
     <link rel="stylesheet" href="options.css">
   </head>
   <body>
     <main class="page">
-      <h1>Quick Side Nav 設定</h1>
-      <p class="description">
-        通常Webページ上のキーやサイドボタンを、別々の移動先URLへ割り当てます。
-        Chrome内部ページやアドレスバー上では動作しません。既に開いているページで反応しない場合は、そのページを再読み込みしてください。
-      </p>
+      <h1 data-i18n="optionsTitle">Quick Side Nav Settings</h1>
+      <p class="description" data-i18n="optionsDescription">Assign keys and mouse side buttons to different destination URLs on regular web pages. The extension does not work on Chrome internal pages or in the address bar. Reload pages that were already open if triggers do not respond.</p>
 
       <form id="settingsForm" class="form" novalidate>
         <section class="settingsSection" aria-labelledby="presetsHeading">
           <div class="presetsHeader">
             <div>
-              <h2 id="presetsHeading">URLプリセット</h2>
-              <p class="hint">よく使う移動先URLを保存して、各ルールから選べます。</p>
+              <h2 id="presetsHeading" data-i18n="urlPresetsHeading">URL presets</h2>
+              <p class="hint" data-i18n="urlPresetsHint">Save frequently used destinations and select them from any rule.</p>
             </div>
-            <button id="addPresetButton" class="secondaryButton compactButton" type="button">プリセットを追加</button>
+            <button id="addPresetButton" class="secondaryButton compactButton" type="button" data-i18n="addPresetButton">Add preset</button>
           </div>
 
           <div id="presetsList" class="presetsList"></div>
@@ -30,27 +27,28 @@
         <section class="settingsSection" aria-labelledby="rulesHeading">
           <div class="rulesHeader">
             <div>
-              <h2 id="rulesHeading">起動ルール</h2>
-              <p class="hint">例：QキーでURL 1へ移動、サイドボタンでURL 2へ移動。</p>
+              <h2 id="rulesHeading" data-i18n="rulesHeading">Trigger rules</h2>
+              <p class="hint" data-i18n="rulesHint">Example: press Q for URL 1 and a side button for URL 2.</p>
             </div>
-            <button id="addRuleButton" class="secondaryButton compactButton" type="button">ルールを追加</button>
+            <button id="addRuleButton" class="secondaryButton compactButton" type="button" data-i18n="addRuleButton">Add rule</button>
           </div>
 
           <div id="rulesList" class="rulesList"></div>
         </section>
 
         <div class="actions">
-          <button id="saveButton" type="submit">保存</button>
+          <button id="saveButton" type="submit" data-i18n="saveButton">Save</button>
           <p id="statusMessage" class="status" role="status" aria-live="polite"></p>
         </div>
       </form>
 
-      <section class="notes" aria-label="使い方">
-        <h2>使い方</h2>
-        <p>拡張機能アイコンから「入力監視」をONにしてください。通常Webページ上で登録したキーやサイドボタンを使うと、対応するURLへ移動します。サイドボタンはブラウザの戻る・進むより優先される場合があります。</p>
+      <section class="notes" aria-label="How to use" data-i18n-aria-label="howToUseHeading">
+        <h2 data-i18n="howToUseHeading">How to use</h2>
+        <p data-i18n="howToUseBody">Turn on Input monitoring from the extension popup. On a regular web page, use a saved key or side button to navigate to its URL. Side-button rules may override the browser's Back or Forward action.</p>
       </section>
     </main>
 
+    <script src="i18n.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

@@ -85,6 +85,7 @@ function renderRules(rules) {
   rules.forEach((rule) => {
     const item = document.createElement("article");
     item.className = "ruleItem";
+    item.classList.toggle("ruleDisabled", !isRuleEnabled(rule));
 
     const text = document.createElement("div");
     text.className = "ruleText";
@@ -97,13 +98,20 @@ function renderRules(rules) {
     url.className = "ruleUrl";
     url.textContent = rule.targetUrl;
 
+    const state = document.createElement("span");
+    state.className = "ruleState";
+    state.textContent = isRuleEnabled(rule)
+      ? getLocalizedMessage("ruleActiveLabel", undefined, "有効")
+      : getLocalizedMessage("ruleDisabledLabel", undefined, "無効");
+
     const button = document.createElement("button");
     button.className = "ruleOpenButton";
     button.type = "button";
     button.dataset.ruleId = rule.id;
-    button.textContent = "このタブで開く";
+    button.disabled = !isRuleEnabled(rule);
+    button.textContent = getLocalizedMessage("openInThisTabButton", undefined, "このタブで開く");
 
-    text.append(trigger, url);
+    text.append(trigger, state, url);
     item.append(text, button);
     list.appendChild(item);
   });
@@ -120,7 +128,7 @@ async function openRule(ruleId, button) {
     });
 
     if (!response || !response.ok) {
-      throw new Error(response?.error || "URLを開けませんでした。");
+      throw new Error(response?.error || getLocalizedMessage("openUrlError", undefined, "URLを開けませんでした。"));
     }
 
     window.close();
@@ -136,8 +144,12 @@ function updateToggleLabel(isEnabled) {
 
   stateLabel.textContent = isEnabled ? "ON" : "OFF";
   hintLabel.textContent = isEnabled
-    ? "通常Webページ上で検知します。既に開いているページでは再読み込みが必要です。"
-    : "登録済みの入力は反応しません。";
+    ? getLocalizedMessage(
+      "monitoringOnHint",
+      undefined,
+      "通常Webページ上で検知します。既に開いているページでは再読み込みが必要です。"
+    )
+    : getLocalizedMessage("monitoringOffHint", undefined, "登録済みの入力は反応しません。");
 }
 
 function setStatus(message) {
@@ -146,18 +158,24 @@ function setStatus(message) {
 
 function getTriggerLabel(rule) {
   if (rule.triggerType === "key") {
-    return rule.triggerKey ? `キー: ${rule.triggerKey.displayName}` : "キー: 未設定";
+    return rule.triggerKey
+      ? getLocalizedMessage("keyTriggerLabel", [rule.triggerKey.displayName], `キー: ${rule.triggerKey.displayName}`)
+      : getLocalizedMessage("keyUnsetLabel", undefined, "キー: 未設定");
   }
 
   if (rule.mouseButton === "3") {
-    return "サイドボタン: 戻る側";
+    return getLocalizedMessage("sideBackLabel", undefined, "サイドボタン: 戻る側");
   }
 
   if (rule.mouseButton === "4") {
-    return "サイドボタン: 進む側";
+    return getLocalizedMessage("sideForwardLabel", undefined, "サイドボタン: 進む側");
   }
 
-  return "サイドボタン";
+  return getLocalizedMessage("sideButtonLabel", undefined, "サイドボタン");
+}
+
+function getLocalizedMessage(name, substitutions, fallback) {
+  return globalThis.qsnI18n?.getMessage?.(name, substitutions, fallback) || fallback;
 }
 
 function normalizeRule(rule) {
@@ -180,11 +198,16 @@ function normalizeRule(rule) {
 
   return {
     id: typeof rule.id === "string" && rule.id ? rule.id : "legacy-default-rule",
+    enabled: isRuleEnabled(rule),
     targetUrl,
     triggerType,
     mouseButton: normalizeMouseButton(rule.mouseButton),
     triggerKey
   };
+}
+
+function isRuleEnabled(rule) {
+  return rule?.enabled !== false;
 }
 
 function normalizeUrl(value) {

@@ -111,7 +111,8 @@ function getRulesFromStorage(result) {
     targetUrl: result.targetUrl,
     triggerType: result.triggerType,
     mouseButton: DEFAULT_MOUSE_BUTTON,
-    triggerKey: result.triggerKey
+    triggerKey: result.triggerKey,
+    enabled: true
   });
 
   return legacyRule ? [legacyRule] : [];
@@ -119,7 +120,7 @@ function getRulesFromStorage(result) {
 
 function hasMatchingMouseRule(button) {
   return settings.rules.some((rule) => {
-    if (rule.triggerType !== "mouse") {
+    if (!isRuleEnabled(rule) || rule.triggerType !== "mouse") {
       return false;
     }
 
@@ -137,7 +138,7 @@ function hasMatchingKeyRule(event) {
   }
 
   return settings.rules.some((rule) => {
-    if (rule.triggerType !== "key" || !rule.triggerKey) {
+    if (!isRuleEnabled(rule) || rule.triggerType !== "key" || !rule.triggerKey) {
       return false;
     }
 
@@ -192,10 +193,15 @@ function normalizeRule(rule) {
   }
 
   return {
+    enabled: isRuleEnabled(rule),
     triggerType,
     mouseButton: normalizeMouseButton(rule.mouseButton),
     triggerKey
   };
+}
+
+function isRuleEnabled(rule) {
+  return rule?.enabled !== false;
 }
 
 function normalizeUrl(value) {

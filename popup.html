@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Quick Side Nav</title>
+    <title data-i18n="extensionName">Quick Side Nav</title>
     <link rel="stylesheet" href="popup.css">
   </head>
   <body>
@@ -14,25 +14,26 @@
 
       <label class="switchRow">
         <span>
-          <span class="switchTitle">入力監視</span>
+          <span class="switchTitle" data-i18n="monitoringLabel">Input monitoring</span>
           <span id="switchState" class="switchState">OFF</span>
-          <span id="switchHint" class="switchHint">登録済みの入力は反応しません。</span>
+          <span id="switchHint" class="switchHint" data-i18n="monitoringOffHint">Saved triggers are inactive.</span>
         </span>
         <input id="enabledToggle" class="switchInput" type="checkbox" role="switch" aria-describedby="switchHint">
       </label>
 
-      <section class="target" aria-label="登録ルール">
-        <span class="label">登録ルール</span>
+      <section class="target" aria-label="Saved rules" data-i18n-aria-label="savedRulesLabel">
+        <span class="label" data-i18n="savedRulesLabel">Saved rules</span>
         <div id="rulesList" class="ruleList"></div>
       </section>
 
       <div class="actions">
-        <button id="optionsButton" class="secondary" type="button">設定を開く</button>
+        <button id="optionsButton" class="secondary" type="button" data-i18n="openSettingsButton">Open settings</button>
       </div>
 
       <p id="statusMessage" class="status" role="status" aria-live="polite"></p>
     </main>
 
+    <script src="i18n.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

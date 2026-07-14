@@ -35,7 +35,15 @@ async function initOptions() {
     urlPresets = [];
     renderPresets();
     renderRules();
-    showStatus(`設定を読み込めませんでした。ページを再読み込みしてください。${getErrorDetail(error)}`, "error");
+    const detail = getErrorDetail(error);
+    showStatus(
+      getLocalizedMessage(
+        "settingsLoadError",
+        [detail],
+        `設定を読み込めませんでした。ページを再読み込みしてください。${detail}`
+      ),
+      "error"
+    );
   }
 
   document.getElementById("settingsForm").addEventListener("submit", async (event) => {
@@ -49,7 +57,7 @@ async function initOptions() {
     renderPresets();
     renderRules();
     focusPresetInput(preset.id, "targetUrl");
-    markDirty("プリセットを追加しました。URLを入力して保存してください。");
+    markDirty(getLocalizedMessage("presetAddedStatus", undefined, "プリセットを追加しました。URLを入力して保存してください。"));
   });
 
   document.getElementById("addRuleButton").addEventListener("click", () => {
@@ -57,7 +65,7 @@ async function initOptions() {
     rules.push(rule);
     renderRules();
     focusRuleControl(rule.id, "[data-field='triggerType']");
-    markDirty("ルールを追加しました。保存すると反映されます。");
+    markDirty(getLocalizedMessage("ruleAddedStatus", undefined, "ルールを追加しました。保存すると反映されます。"));
   });
 
   document.getElementById("presetsList").addEventListener("input", handlePresetInput);
@@ -138,7 +146,7 @@ function renderPresets() {
   if (urlPresets.length === 0) {
     const empty = document.createElement("p");
     empty.className = "emptyState";
-    empty.textContent = "保存済みプリセットはありません。";
+    empty.textContent = getLocalizedMessage("noSavedPresets", undefined, "保存済みプリセットはありません。");
     list.appendChild(empty);
     return;
   }
@@ -152,7 +160,10 @@ function createPresetCard(preset, index) {
   const card = document.createElement("section");
   card.className = "presetCard";
   card.dataset.presetId = preset.id;
-  card.setAttribute("aria-label", `URLプリセット ${index + 1}`);
+  card.setAttribute(
+    "aria-label",
+    getLocalizedMessage("urlPresetAria", [index + 1], `URLプリセット ${index + 1}`)
+  );
 
   const header = document.createElement("header");
   header.className = "ruleHeader";
@@ -161,12 +172,12 @@ function createPresetCard(preset, index) {
   titleGroup.className = "presetMeta";
 
   const title = document.createElement("h3");
-  title.textContent = `プリセット ${index + 1}`;
+  title.textContent = getLocalizedMessage("presetTitle", [index + 1], `プリセット ${index + 1}`);
 
   const usageCount = countRulesUsingPreset(preset.id);
   const usage = document.createElement("span");
   usage.className = "usageBadge";
-  usage.textContent = usageCount > 0 ? `${usageCount}件のルールで使用中` : "未使用";
+  usage.textContent = getRuleUsageLabel(usageCount);
 
   titleGroup.append(title, usage);
 
@@ -174,8 +185,11 @@ function createPresetCard(preset, index) {
   deleteButton.className = "dangerButton compactButton";
   deleteButton.type = "button";
   deleteButton.dataset.action = "delete-preset";
-  deleteButton.textContent = "削除";
-  deleteButton.setAttribute("aria-label", `プリセット ${index + 1} を削除`);
+  deleteButton.textContent = getLocalizedMessage("deleteButton", undefined, "削除");
+  deleteButton.setAttribute(
+    "aria-label",
+    getLocalizedMessage("deletePresetAria", [index + 1], `プリセット ${index + 1} を削除`)
+  );
 
   header.append(titleGroup, deleteButton);
 
@@ -193,13 +207,13 @@ function createPresetLabelField(preset) {
 
   const text = document.createElement("span");
   text.className = "label";
-  text.textContent = "表示名";
+  text.textContent = getLocalizedMessage("displayNameLabel", undefined, "表示名");
 
   const input = document.createElement("input");
   input.type = "text";
   input.autocomplete = "off";
   input.maxLength = MAX_PRESET_LABEL_LENGTH;
-  input.placeholder = "例：ChatGPT";
+  input.placeholder = getLocalizedMessage("displayNamePlaceholder", undefined, "例：ChatGPT");
   input.dataset.presetField = "label";
   input.value = preset.label;
 
@@ -241,23 +255,35 @@ function renderRules() {
 function createRuleCard(rule, index) {
   const card = document.createElement("section");
   card.className = "ruleCard";
+  card.classList.toggle("ruleDisabled", !isRuleEnabled(rule));
   card.dataset.ruleId = rule.id;
-  card.setAttribute("aria-label", `起動ルール ${index + 1}`);
+  card.setAttribute(
+    "aria-label",
+    getLocalizedMessage("triggerRuleAria", [index + 1], `起動ルール ${index + 1}`)
+  );
 
   const header = document.createElement("header");
   header.className = "ruleHeader";
 
   const title = document.createElement("h3");
-  title.textContent = `ルール ${index + 1}`;
+  title.textContent = getLocalizedMessage("ruleTitle", [index + 1], `ルール ${index + 1}`);
+
+  const headerActions = document.createElement("div");
+  headerActions.className = "ruleHeaderActions";
+  headerActions.append(createRuleEnabledToggle(rule));
 
   const deleteButton = document.createElement("button");
   deleteButton.className = "dangerButton compactButton";
   deleteButton.type = "button";
   deleteButton.dataset.action = "delete-rule";
-  deleteButton.textContent = "削除";
-  deleteButton.setAttribute("aria-label", `ルール ${index + 1} を削除`);
+  deleteButton.textContent = getLocalizedMessage("deleteButton", undefined, "削除");
+  deleteButton.setAttribute(
+    "aria-label",
+    getLocalizedMessage("deleteRuleAria", [index + 1], `ルール ${index + 1} を削除`)
+  );
 
-  header.append(title, deleteButton);
+  headerActions.append(deleteButton);
+  header.append(title, headerActions);
 
   const triggerField = createTriggerField(rule);
   const mouseSettings = createMouseSettings(rule);
@@ -268,20 +294,40 @@ function createRuleCard(rule, index) {
   return card;
 }
 
+function createRuleEnabledToggle(rule) {
+  const label = document.createElement("label");
+  label.className = "ruleEnabledToggle";
+
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.dataset.field = "enabled";
+  input.checked = isRuleEnabled(rule);
+
+  const text = document.createElement("span");
+  text.textContent = getLocalizedMessage("ruleEnabledLabel", undefined, "有効");
+
+  label.append(input, text);
+  return label;
+}
+
 function createTriggerField(rule) {
   const label = document.createElement("label");
   label.className = "field";
 
   const text = document.createElement("span");
   text.className = "label";
-  text.textContent = "起動方法";
+  text.textContent = getLocalizedMessage("triggerMethodLabel", undefined, "起動方法");
 
   const select = document.createElement("select");
   select.dataset.field = "triggerType";
 
   select.append(
-    createOption("mouse", "サイドボタン", rule.triggerType === "mouse"),
-    createOption("key", "キー", rule.triggerType === "key")
+    createOption(
+      "mouse",
+      getLocalizedMessage("sideButtonLabel", undefined, "サイドボタン"),
+      rule.triggerType === "mouse"
+    ),
+    createOption("key", getLocalizedMessage("keyOption", undefined, "キー"), rule.triggerType === "key")
   );
 
   label.append(text, select);
@@ -295,15 +341,27 @@ function createMouseSettings(rule) {
 
   const text = document.createElement("span");
   text.className = "label";
-  text.textContent = "サイドボタン";
+  text.textContent = getLocalizedMessage("sideButtonLabel", undefined, "サイドボタン");
 
   const select = document.createElement("select");
   select.dataset.field = "mouseButton";
 
   select.append(
-    createOption("side", "どちらのサイドボタンでも", rule.mouseButton === "side"),
-    createOption("3", "戻る側のサイドボタン", rule.mouseButton === "3"),
-    createOption("4", "進む側のサイドボタン", rule.mouseButton === "4")
+    createOption(
+      "side",
+      getLocalizedMessage("anySideButton", undefined, "どちらのサイドボタンでも"),
+      rule.mouseButton === "side"
+    ),
+    createOption(
+      "3",
+      getLocalizedMessage("backSideButton", undefined, "戻る側のサイドボタン"),
+      rule.mouseButton === "3"
+    ),
+    createOption(
+      "4",
+      getLocalizedMessage("forwardSideButton", undefined, "進む側のサイドボタン"),
+      rule.mouseButton === "4"
+    )
   );
 
   label.append(text, select);
@@ -317,30 +375,36 @@ function createKeySettings(rule) {
 
   const label = document.createElement("span");
   label.className = "label";
-  label.textContent = "起動キー";
+  label.textContent = getLocalizedMessage("triggerKeyLabel", undefined, "起動キー");
 
   const capture = document.createElement("div");
   capture.className = "keyCapture";
 
   const display = document.createElement("output");
   display.className = "keyDisplay";
-  display.textContent = rule.triggerKey ? rule.triggerKey.displayName : "未設定";
+  display.textContent = rule.triggerKey
+    ? rule.triggerKey.displayName
+    : getLocalizedMessage("notSetLabel", undefined, "未設定");
 
   const captureButton = document.createElement("button");
   captureButton.className = "secondaryButton";
   captureButton.type = "button";
   captureButton.dataset.action = "capture-key";
-  captureButton.textContent = "キーを記録";
+  captureButton.textContent = getLocalizedMessage("recordKeyButton", undefined, "キーを記録");
 
   const clearButton = document.createElement("button");
   clearButton.className = "secondaryButton";
   clearButton.type = "button";
   clearButton.dataset.action = "clear-key";
-  clearButton.textContent = "解除";
+  clearButton.textContent = getLocalizedMessage("clearButton", undefined, "解除");
 
   const hint = document.createElement("p");
   hint.className = "hint";
-  hint.textContent = "文字入力欄では誤操作防止のため反応しません。Ctrl、Alt、Shiftだけの指定はできません。";
+  hint.textContent = getLocalizedMessage(
+    "keyHint",
+    undefined,
+    "文字入力欄では誤操作防止のため反応しません。Ctrl、Alt、Shiftだけの指定はできません。"
+  );
 
   capture.append(display, captureButton, clearButton);
   wrapper.append(label, capture, hint);
@@ -356,7 +420,7 @@ function createUrlField(rule) {
 
   const presetText = document.createElement("span");
   presetText.className = "label";
-  presetText.textContent = "URLプリセット";
+  presetText.textContent = getLocalizedMessage("urlPresetLabel", undefined, "URLプリセット");
 
   const presetSelect = document.createElement("select");
   presetSelect.dataset.field = "presetId";
@@ -368,10 +432,14 @@ function createUrlField(rule) {
   });
 
   if (availablePresets.length === 0) {
-    presetSelect.append(createOption("", "保存済みプリセットなし", true));
+    presetSelect.append(
+      createOption("", getLocalizedMessage("noSavedPresetOption", undefined, "保存済みプリセットなし"), true)
+    );
     presetSelect.disabled = true;
   } else {
-    presetSelect.append(createOption("", "直接入力", selectedPresetId === ""));
+    presetSelect.append(
+      createOption("", getLocalizedMessage("directInputOption", undefined, "直接入力"), selectedPresetId === "")
+    );
 
     availablePresets.forEach((preset) => {
       const option = createOption(
@@ -391,7 +459,7 @@ function createUrlField(rule) {
 
   const text = document.createElement("span");
   text.className = "label";
-  text.textContent = "移動先URL";
+  text.textContent = getLocalizedMessage("destinationUrlLabel", undefined, "移動先URL");
 
   const input = document.createElement("input");
   input.type = "url";
@@ -405,7 +473,10 @@ function createUrlField(rule) {
   input.readOnly = Boolean(selectedPreset);
 
   if (selectedPreset) {
-    input.setAttribute("aria-label", "移動先URL（プリセットに連動中）");
+    input.setAttribute(
+      "aria-label",
+      getLocalizedMessage("linkedUrlAria", undefined, "移動先URL（プリセットに連動中）")
+    );
   }
 
   urlLabel.append(text, input);
@@ -418,30 +489,42 @@ function createUrlField(rule) {
 
   if (selectedPreset) {
     hint.textContent = isSelectablePreset(selectedPreset)
-      ? "プリセットに連動中です。URLはプリセット側で変更できます。"
-      : "このプリセットのURLが未設定または不正です。プリセットを編集してください。";
+      ? getLocalizedMessage(
+        "linkedPresetHint",
+        undefined,
+        "プリセットに連動中です。URLはプリセット側で変更できます。"
+      )
+      : getLocalizedMessage(
+        "invalidLinkedPresetHint",
+        undefined,
+        "このプリセットのURLが未設定または不正です。プリセットを編集してください。"
+      );
 
     const editButton = document.createElement("button");
     editButton.className = "secondaryButton inlineButton";
     editButton.type = "button";
     editButton.dataset.action = "edit-preset";
-    editButton.textContent = "プリセットを編集";
+    editButton.textContent = getLocalizedMessage("editPresetButton", undefined, "プリセットを編集");
 
     const detachButton = document.createElement("button");
     detachButton.className = "secondaryButton inlineButton";
     detachButton.type = "button";
     detachButton.dataset.action = "use-direct-url";
-    detachButton.textContent = "直接入力に切り替える";
+    detachButton.textContent = getLocalizedMessage("switchDirectButton", undefined, "直接入力に切り替える");
 
     actions.append(hint, editButton, detachButton);
   } else {
-    hint.textContent = "このルールだけで使うURLです。必要ならプリセットとして再利用できます。";
+    hint.textContent = getLocalizedMessage(
+      "directUrlHint",
+      undefined,
+      "このルールだけで使うURLです。必要ならプリセットとして再利用できます。"
+    );
 
     const saveAsPresetButton = document.createElement("button");
     saveAsPresetButton.className = "secondaryButton inlineButton";
     saveAsPresetButton.type = "button";
     saveAsPresetButton.dataset.action = "save-url-as-preset";
-    saveAsPresetButton.textContent = "プリセットに追加";
+    saveAsPresetButton.textContent = getLocalizedMessage("addToPresetButton", undefined, "プリセットに追加");
 
     actions.append(hint, saveAsPresetButton);
   }
@@ -530,6 +613,16 @@ function handleRuleChange(event) {
     return;
   }
 
+  if (field === "enabled") {
+    rule.enabled = event.target.checked;
+    renderRules();
+    focusRuleControl(rule.id, "[data-field='enabled']");
+    markDirty(rule.enabled
+      ? getLocalizedMessage("ruleEnabledStatus", undefined, "ルールを有効にしました。保存すると反映されます。")
+      : getLocalizedMessage("ruleDisabledStatus", undefined, "ルールを無効にしました。保存すると反映されます。"));
+    return;
+  }
+
   if (field === "triggerType") {
     rule.triggerType = normalizeTriggerType(event.target.value);
     renderRules();
@@ -576,7 +669,7 @@ function handleRuleClick(event) {
     rule.triggerKey = null;
     renderRules();
     focusRuleControl(rule.id, "[data-action='capture-key']");
-    markDirty("起動キーを解除しました。保存すると反映されます。");
+    markDirty(getLocalizedMessage("keyClearedStatus", undefined, "起動キーを解除しました。保存すると反映されます。"));
     return;
   }
 
@@ -597,7 +690,7 @@ function handleRuleClick(event) {
 
 function deleteRule(ruleId) {
   if (rules.length <= 1) {
-    showStatus("ルールは最低1つ必要です。", "error");
+    showStatus(getLocalizedMessage("atLeastOneRuleError", undefined, "ルールは最低1つ必要です。"), "error");
     return;
   }
 
@@ -613,16 +706,19 @@ function deleteRule(ruleId) {
     document.getElementById("addRuleButton")?.focus();
   }
 
-  markDirty("ルールを削除しました。保存すると反映されます。");
+  markDirty(getLocalizedMessage("ruleDeletedStatus", undefined, "ルールを削除しました。保存すると反映されます。"));
 }
 
 function deletePreset(presetId) {
   const usageCount = countRulesUsingPreset(presetId);
 
   if (usageCount > 0) {
-    const confirmed = window.confirm(
-      `このプリセットは${usageCount}件のルールで使用中です。削除すると各ルールは保持済みのURLを直接入力で使い続けます。削除しますか？`
-    );
+    const fallback = usageCount === 1
+      ? "このプリセットは1件のルールで使用中です。削除するとルールは保持済みのURLを直接入力で使い続けます。削除しますか？"
+      : `このプリセットは${usageCount}件のルールで使用中です。削除すると各ルールは保持済みのURLを直接入力で使い続けます。削除しますか？`;
+    const confirmed = window.confirm(usageCount === 1
+      ? getLocalizedMessage("deleteUsedPresetConfirmOne", undefined, fallback)
+      : getLocalizedMessage("deleteUsedPresetConfirmMany", [usageCount], fallback));
 
     if (!confirmed) {
       return;
@@ -646,7 +742,11 @@ function deletePreset(presetId) {
   const nextFocusTarget = nextCard?.querySelector("[data-preset-field='label']")
     || document.getElementById("addPresetButton");
   nextFocusTarget?.focus();
-  markDirty("プリセットを削除しました。利用中のルールは直接入力に切り替えました。");
+  markDirty(getLocalizedMessage(
+    "presetDeletedStatus",
+    undefined,
+    "プリセットを削除しました。利用中のルールは直接入力に切り替えました。"
+  ));
 }
 
 function applyPresetToRule(rule, presetId, select) {
@@ -665,7 +765,10 @@ function applyPresetToRule(rule, presetId, select) {
   }
 
   if (!isSelectablePreset(preset)) {
-    showStatus("URLを保存済みのプリセットを選んでください。", "error");
+    showStatus(
+      getLocalizedMessage("selectValidPresetError", undefined, "URLを保存済みのプリセットを選んでください。"),
+      "error"
+    );
     syncRulePresetSelect(select, rule.presetId);
     return;
   }
@@ -681,7 +784,7 @@ function applyPresetToRule(rule, presetId, select) {
   renderPresets();
   renderRules();
   focusRuleControl(rule.id, "[data-field='presetId']");
-  markDirty("プリセットを適用しました。保存すると反映されます。");
+  markDirty(getLocalizedMessage("presetAppliedStatus", undefined, "プリセットを適用しました。保存すると反映されます。"));
 }
 
 function switchRuleToDirectUrl(rule) {
@@ -691,14 +794,24 @@ function switchRuleToDirectUrl(rule) {
 
   const card = document.querySelector(`[data-rule-id="${CSS.escape(rule.id)}"]`);
   card?.querySelector("[data-field='targetUrl']")?.focus();
-  markDirty("プリセットへの連動を解除しました。URLは直接入力で編集できます。");
+  markDirty(getLocalizedMessage(
+    "presetDetachedStatus",
+    undefined,
+    "プリセットへの連動を解除しました。URLは直接入力で編集できます。"
+  ));
 }
 
 function saveRuleUrlAsPreset(rule) {
   const targetUrl = normalizeValidUrl(rule.targetUrl);
 
   if (!targetUrl) {
-    showStatus(getUrlValidationMessage(rule.targetUrl, "このルール"), "error");
+    showStatus(
+      getUrlValidationMessage(
+        rule.targetUrl,
+        getLocalizedMessage("thisRuleSubject", undefined, "このルール")
+      ),
+      "error"
+    );
     focusInvalidRuleField(rule.id, "targetUrl");
     return;
   }
@@ -713,7 +826,11 @@ function saveRuleUrlAsPreset(rule) {
     renderPresets();
     renderRules();
     focusRuleControl(rule.id, "[data-field='presetId']");
-    markDirty("同じURLのプリセットに連動しました。保存すると反映されます。");
+    markDirty(getLocalizedMessage(
+      "matchedExistingPresetStatus",
+      undefined,
+      "同じURLのプリセットに連動しました。保存すると反映されます。"
+    ));
     return;
   }
 
@@ -726,7 +843,11 @@ function saveRuleUrlAsPreset(rule) {
   renderPresets();
   renderRules();
   focusRuleControl(rule.id, "[data-field='presetId']");
-  markDirty("このURLをプリセットに追加し、ルールを連動しました。保存すると反映されます。");
+  markDirty(getLocalizedMessage(
+    "presetCreatedFromUrlStatus",
+    undefined,
+    "このURLをプリセットに追加し、ルールを連動しました。保存すると反映されます。"
+  ));
 }
 
 function countRulesUsingPreset(presetId) {
@@ -778,13 +899,23 @@ function startKeyCapture(ruleId, button) {
   keyCaptureSession = {
     ruleId,
     timeoutId: window.setTimeout(() => {
-      cancelKeyCapture("キー記録が時間切れになりました。もう一度「キーを記録」を押してください。", "error");
+      cancelKeyCapture(
+        getLocalizedMessage(
+          "captureTimeoutError",
+          undefined,
+          "キー記録が時間切れになりました。もう一度「キーを記録」を押してください。"
+        ),
+        "error"
+      );
     }, KEY_CAPTURE_TIMEOUT_MS)
   };
 
-  button.textContent = "キーを押してください";
+  button.textContent = getLocalizedMessage("pressKeyButton", undefined, "キーを押してください");
   button.disabled = true;
-  showStatus("起動に使うキーを押してください。Escでキャンセルできます。", "pending");
+  showStatus(
+    getLocalizedMessage("pressKeyStatus", undefined, "起動に使うキーを押してください。Escでキャンセルできます。"),
+    "pending"
+  );
 
   window.addEventListener("keydown", handleKeyCaptureKeyDown, { capture: true });
   window.addEventListener("blur", handleKeyCaptureBlur, { once: true });
@@ -795,7 +926,14 @@ function handleKeyCaptureKeyDown(event) {
 }
 
 function handleKeyCaptureBlur() {
-  cancelKeyCapture("画面が非アクティブになったため、キー記録をキャンセルしました。", "pending");
+  cancelKeyCapture(
+    getLocalizedMessage(
+      "captureBlurCancelled",
+      undefined,
+      "画面が非アクティブになったため、キー記録をキャンセルしました。"
+    ),
+    "pending"
+  );
 }
 
 function captureKey(event, ruleId) {
@@ -803,7 +941,7 @@ function captureKey(event, ruleId) {
   event.stopPropagation();
 
   if (event.key === "Escape") {
-    cancelKeyCapture("キー記録をキャンセルしました。", "pending");
+    cancelKeyCapture(getLocalizedMessage("captureCancelled", undefined, "キー記録をキャンセルしました。"), "pending");
     return;
   }
 
@@ -819,7 +957,14 @@ function captureKey(event, ruleId) {
   if (isModifierOnly(event)) {
     renderRules();
     focusRuleControl(rule.id, "[data-action='capture-key']");
-    showStatus("Ctrl、Alt、Shiftだけは指定できません。文字キーやファンクションキーと組み合わせてください。", "error");
+    showStatus(
+      getLocalizedMessage(
+        "modifiersOnlyError",
+        undefined,
+        "Ctrl、Alt、Shiftだけは指定できません。文字キーやファンクションキーと組み合わせてください。"
+      ),
+      "error"
+    );
     return;
   }
 
@@ -827,7 +972,11 @@ function captureKey(event, ruleId) {
   rule.triggerKey = triggerKey;
   renderRules();
   focusRuleControl(rule.id, "[data-action='capture-key']");
-  markDirty(getShortcutWarning(triggerKey) || "起動キーを記録しました。保存すると反映されます。");
+  markDirty(getShortcutWarning(triggerKey) || getLocalizedMessage(
+    "keyRecordedStatus",
+    undefined,
+    "起動キーを記録しました。保存すると反映されます。"
+  ));
 }
 
 function cancelKeyCapture(message, type) {
@@ -875,7 +1024,10 @@ async function saveSettings() {
     const normalizedPreset = normalizeUrlPreset(preset);
 
     if (!normalizedPreset) {
-      showStatus(`プリセット ${index + 1} を確認してください。`, "error");
+      showStatus(
+        getLocalizedMessage("checkPresetError", [index + 1], `プリセット ${index + 1} を確認してください。`),
+        "error"
+      );
       return;
     }
 
@@ -894,7 +1046,10 @@ async function saveSettings() {
     const normalizedRule = normalizeRule(rule, normalizedPresets);
 
     if (!normalizedRule) {
-      showStatus(`ルール ${index + 1} を確認してください。`, "error");
+      showStatus(
+        getLocalizedMessage("checkRuleError", [index + 1], `ルール ${index + 1} を確認してください。`),
+        "error"
+      );
       return;
     }
 
@@ -916,7 +1071,7 @@ async function saveSettings() {
   }
 
   setSavingState(true);
-  showStatus("保存中です…", "pending");
+  showStatus(getLocalizedMessage("savingStatus", undefined, "保存中です…"), "pending");
 
   try {
     await chrome.storage.sync.set({
@@ -932,7 +1087,7 @@ async function saveSettings() {
     hasUnsavedChanges = false;
     renderPresets();
     renderRules();
-    showStatus("保存しました。", "success");
+    showStatus(getLocalizedMessage("savedStatus", undefined, "保存しました。"), "success");
   } catch (error) {
     showStatus(getSaveErrorMessage(error), "error");
   } finally {
@@ -943,8 +1098,12 @@ async function saveSettings() {
 
 function getStorageSizeError(presetList, ruleList) {
   const items = [
-    [STORAGE_KEYS.urlPresets, presetList, "URLプリセット"],
-    [STORAGE_KEYS.rules, ruleList, "起動ルール"]
+    [
+      STORAGE_KEYS.urlPresets,
+      presetList,
+      getLocalizedMessage("urlPresetsStorageLabel", undefined, "URLプリセット")
+    ],
+    [STORAGE_KEYS.rules, ruleList, getLocalizedMessage("rulesStorageLabel", undefined, "起動ルール")]
   ];
 
   for (const [key, value, label] of items) {
@@ -952,7 +1111,11 @@ function getStorageSizeError(presetList, ruleList) {
     const byteLength = new TextEncoder().encode(serialized).byteLength;
 
     if (byteLength > SYNC_ITEM_QUOTA_BYTES) {
-      return `${label}のデータ量がChrome同期ストレージの上限を超えています。件数を減らすか、長いURLを短くしてから保存してください。`;
+      return getLocalizedMessage(
+        "storageItemTooLargeError",
+        [label],
+        `${label}のデータ量がChrome同期ストレージの上限を超えています。件数を減らすか、長いURLを短くしてから保存してください。`
+      );
     }
   }
 
@@ -973,7 +1136,9 @@ function setSavingState(saving) {
 
   if (saveButton) {
     saveButton.setAttribute("aria-busy", String(saving));
-    saveButton.textContent = saving ? "保存中" : "保存";
+    saveButton.textContent = saving
+      ? getLocalizedMessage("savingButton", undefined, "保存中")
+      : getLocalizedMessage("saveButton", undefined, "保存");
   }
 
   if (saving) {
@@ -996,15 +1161,24 @@ function getSaveErrorMessage(error) {
   const detail = error instanceof Error ? error.message : String(error || "");
 
   if (/quota|bytes per item|max write/i.test(detail)) {
-    return "設定のデータ量がChrome同期ストレージの上限を超えたため保存できませんでした。件数を減らすか、長いURLを短くしてください。";
+    return getLocalizedMessage(
+      "quotaSaveError",
+      undefined,
+      "設定のデータ量がChrome同期ストレージの上限を超えたため保存できませんでした。件数を減らすか、長いURLを短くしてください。"
+    );
   }
 
-  return `保存できませんでした。接続状態を確認して、もう一度お試しください。${getErrorDetail(error)}`;
+  const errorDetail = getErrorDetail(error);
+  return getLocalizedMessage(
+    "saveError",
+    [errorDetail],
+    `保存できませんでした。接続状態を確認して、もう一度お試しください。${errorDetail}`
+  );
 }
 
 function getErrorDetail(error) {
   const detail = error instanceof Error ? error.message : String(error || "");
-  return detail ? `（${detail}）` : "";
+  return detail ? getLocalizedMessage("errorDetail", [detail], `（${detail}）`) : "";
 }
 
 function getPresetValidationError(preset, index) {
@@ -1014,7 +1188,10 @@ function getPresetValidationError(preset, index) {
   if (!isValidUrl(targetUrl)) {
     return {
       field: "targetUrl",
-      message: getUrlValidationMessage(preset.targetUrl, `プリセット ${presetNumber}`)
+      message: getUrlValidationMessage(
+        preset.targetUrl,
+        getLocalizedMessage("presetSubject", [presetNumber], `プリセット ${presetNumber}`)
+      )
     };
   }
 
@@ -1029,14 +1206,21 @@ function getRuleValidationError(rule, index, presetList = urlPresets) {
   if (!isValidUrl(targetUrl)) {
     return {
       field: "targetUrl",
-      message: getUrlValidationMessage(targetUrl, `ルール ${ruleNumber}`)
+      message: getUrlValidationMessage(
+        targetUrl,
+        getLocalizedMessage("ruleSubject", [ruleNumber], `ルール ${ruleNumber}`)
+      )
     };
   }
 
   if (triggerType === "key" && !normalizeTriggerKey(rule.triggerKey)) {
     return {
       field: "triggerKey",
-      message: `ルール ${ruleNumber} の起動キーを記録してください。`
+      message: getLocalizedMessage(
+        "recordTriggerKeyError",
+        [ruleNumber],
+        `ルール ${ruleNumber} の起動キーを記録してください。`
+      )
     };
   }
 
@@ -1082,10 +1266,20 @@ function focusInvalidRuleField(ruleId, field) {
 }
 
 function findDuplicateTriggerMessage(ruleList) {
-  for (let index = 0; index < ruleList.length; index += 1) {
-    for (let compareIndex = index + 1; compareIndex < ruleList.length; compareIndex += 1) {
-      if (doTriggersOverlap(ruleList[index], ruleList[compareIndex])) {
-        return `ルール ${index + 1} とルール ${compareIndex + 1} の起動方法が重複しています。`;
+  const enabledRules = ruleList
+    .map((rule, index) => ({ rule, index }))
+    .filter(({ rule }) => isRuleEnabled(rule));
+
+  for (let index = 0; index < enabledRules.length; index += 1) {
+    for (let compareIndex = index + 1; compareIndex < enabledRules.length; compareIndex += 1) {
+      if (doTriggersOverlap(enabledRules[index].rule, enabledRules[compareIndex].rule)) {
+        const firstRuleNumber = enabledRules[index].index + 1;
+        const secondRuleNumber = enabledRules[compareIndex].index + 1;
+        return getLocalizedMessage(
+          "duplicateTriggerError",
+          [firstRuleNumber, secondRuleNumber],
+          `ルール ${firstRuleNumber} とルール ${secondRuleNumber} の起動方法が重複しています。`
+        );
       }
     }
   }
@@ -1133,15 +1327,27 @@ function getShortcutWarning(triggerKey) {
   ]);
 
   if (code === "F5" || code === "F11") {
-    return "このキーはブラウザ操作と競合する場合があります。必要なら別のキーに変更してください。保存すると反映されます。";
+    return getLocalizedMessage(
+      "shortcutKeyConflictWarning",
+      undefined,
+      "このキーはブラウザ操作と競合する場合があります。必要なら別のキーに変更してください。保存すると反映されます。"
+    );
   }
 
   if (withCtrlOrMeta && browserShortcutCodes.has(code)) {
-    return "このショートカットはブラウザ操作と競合する場合があります。必要なら別のキーに変更してください。保存すると反映されます。";
+    return getLocalizedMessage(
+      "shortcutConflictWarning",
+      undefined,
+      "このショートカットはブラウザ操作と競合する場合があります。必要なら別のキーに変更してください。保存すると反映されます。"
+    );
   }
 
   if (withAlt && (code === "ArrowLeft" || code === "ArrowRight")) {
-    return "このショートカットはブラウザの戻る・進むと競合する場合があります。必要なら別のキーに変更してください。保存すると反映されます。";
+    return getLocalizedMessage(
+      "shortcutBackForwardConflictWarning",
+      undefined,
+      "このショートカットはブラウザの戻る・進むと競合する場合があります。必要なら別のキーに変更してください。保存すると反映されます。"
+    );
   }
 
   return "";
@@ -1180,7 +1386,7 @@ function getPresetDisplayName(preset) {
   const targetUrl = normalizeValidUrl(preset.targetUrl);
 
   if (!targetUrl) {
-    return `${label}（URLを要修正）`;
+    return getLocalizedMessage("urlNeedsFixSuffix", [label], `${label}（URLを要修正）`);
   }
 
   const urlSummary = targetUrl.replace(/^https?:\/\//i, "");
@@ -1204,6 +1410,7 @@ function focusPresetInput(presetId, field) {
 function createRule() {
   return {
     id: createRuleId(),
+    enabled: true,
     targetUrl: DEFAULT_URL,
     triggerType: "key",
     mouseButton: DEFAULT_MOUSE_BUTTON,
@@ -1215,6 +1422,7 @@ function createRule() {
 function createDefaultRule() {
   return {
     id: createRuleId(),
+    enabled: true,
     targetUrl: DEFAULT_URL,
     triggerType: "mouse",
     mouseButton: DEFAULT_MOUSE_BUTTON,
@@ -1247,6 +1455,7 @@ function normalizeStoredRule(rule, presetList = urlPresets) {
 
   return {
     id: typeof rule.id === "string" && rule.id ? rule.id : createRuleId(),
+    enabled: isRuleEnabled(rule),
     targetUrl: normalizeUrl(preset ? preset.targetUrl : rule.targetUrl),
     triggerType,
     mouseButton: normalizeMouseButton(rule.mouseButton),
@@ -1276,6 +1485,7 @@ function normalizeRule(rule, presetList = urlPresets) {
 
   return {
     id: typeof rule.id === "string" && rule.id ? rule.id : createRuleId(),
+    enabled: isRuleEnabled(rule),
     targetUrl,
     triggerType,
     mouseButton: normalizeMouseButton(rule.mouseButton),
@@ -1347,7 +1557,11 @@ function getUrlValidationMessage(value, subject) {
   const targetUrl = normalizeUrl(value);
 
   if (targetUrl.length > MAX_URL_LENGTH) {
-    return `${subject}のURLが長すぎます。${MAX_URL_LENGTH}文字以内にしてください。`;
+    return getLocalizedMessage(
+      "urlTooLongError",
+      [subject, MAX_URL_LENGTH],
+      `${subject}のURLが長すぎます。${MAX_URL_LENGTH}文字以内にしてください。`
+    );
   }
 
   if (/^https?:\/\//i.test(targetUrl)) {
@@ -1355,14 +1569,22 @@ function getUrlValidationMessage(value, subject) {
       const url = new URL(targetUrl);
 
       if (url.username || url.password) {
-        return `${subject}のURLにはユーザー名やパスワードを含められません。`;
+        return getLocalizedMessage(
+          "credentialsNotAllowedError",
+          [subject],
+          `${subject}のURLにはユーザー名やパスワードを含められません。`
+        );
       }
     } catch {
       // Fall through to the general format message.
     }
   }
 
-  return `${subject}のURLを確認してください。https:// または http:// から始まるURLが必要です。`;
+  return getLocalizedMessage(
+    "invalidUrlError",
+    [subject],
+    `${subject}のURLを確認してください。https:// または http:// から始まるURLが必要です。`
+  );
 }
 
 function isSelectablePreset(preset) {
@@ -1390,12 +1612,16 @@ function normalizePresetLabel(value, targetUrl) {
   return (label || getDefaultPresetLabel(targetUrl)).slice(0, MAX_PRESET_LABEL_LENGTH);
 }
 
+function isRuleEnabled(rule) {
+  return rule?.enabled !== false;
+}
+
 function getDefaultPresetLabel(targetUrl) {
   try {
     const url = new URL(targetUrl);
-    return url.hostname || "URLプリセット";
+    return url.hostname || getLocalizedMessage("defaultPresetLabel", undefined, "URLプリセット");
   } catch {
-    return "URLプリセット";
+    return getLocalizedMessage("defaultPresetLabel", undefined, "URLプリセット");
   }
 }
 
@@ -1467,7 +1693,11 @@ function createPresetId() {
   return `preset-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function markDirty(message = "未保存の変更があります。保存すると反映されます。") {
+function markDirty(message = getLocalizedMessage(
+  "unsavedChangesStatus",
+  undefined,
+  "未保存の変更があります。保存すると反映されます。"
+)) {
   hasUnsavedChanges = true;
   showStatus(message, "pending");
 }
@@ -1491,4 +1721,20 @@ function showStatus(message, type) {
   }
 
   status.className = `status ${type}`;
+}
+
+function getRuleUsageLabel(usageCount) {
+  if (usageCount === 0) {
+    return getLocalizedMessage("unusedLabel", undefined, "未使用");
+  }
+
+  if (usageCount === 1) {
+    return getLocalizedMessage("ruleUsageOne", undefined, "1件のルールで使用中");
+  }
+
+  return getLocalizedMessage("ruleUsageMany", [usageCount], `${usageCount}件のルールで使用中`);
+}
+
+function getLocalizedMessage(name, substitutions, fallback) {
+  return globalThis.qsnI18n?.getMessage?.(name, substitutions, fallback) || fallback;
 }

@@ -5,7 +5,8 @@ const STORAGE_KEYS = {
   isEnabled: "isEnabled",
   triggerType: "triggerType",
   triggerKey: "triggerKey",
-  rules: "rules"
+  rules: "rules",
+  urlPresets: "urlPresets"
 };
 
 const MESSAGE_TYPES = {
@@ -16,7 +17,12 @@ const MESSAGE_TYPES = {
 const DEFAULT_TRIGGER_TYPE = "mouse";
 const DEFAULT_MOUSE_BUTTON = "side";
 const ENABLED_BADGE_COLOR = "#047857";
+const ADDED_BADGE_COLOR = "#2563eb";
+const ERROR_BADGE_COLOR = "#b91c1c";
 const MAX_URL_LENGTH = 2048;
+const MAX_PRESET_LABEL_LENGTH = 80;
+const SYNC_ITEM_QUOTA_BYTES = 8192;
+const CONTEXT_MENU_ADD_PRESET_ID = "quick-side-nav-add-page-preset";
 
 chrome.runtime.onInstalled.addListener(() => {
   syncActionBadge();
@@ -25,6 +31,21 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.runtime.onStartup.addListener(() => {
   syncActionBadge();
 });
+
+if (chrome.contextMenus?.onClicked) {
+  chrome.contextMenus.onClicked.addListener((info, tab) => {
+    if (info.menuItemId !== CONTEXT_MENU_ADD_PRESET_ID) {
+      return;
+    }
+
+    addCurrentPageUrlPreset(info, tab)
+      .then((result) => flashActionBadge(result.added ? "ADD" : "OK", ADDED_BADGE_COLOR))
+      .catch((error) => {
+        console.warn("[Quick Side Nav] Failed to add URL preset from context menu:", error);
+        flashActionBadge("!", ERROR_BADGE_COLOR);
+      });
+  });
+}
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "sync" && STORAGE_KEYS.isEnabled in changes) {
@@ -60,6 +81,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
+setupContextMenus();
 syncActionBadge();
 
 async function openFromTrigger(trigger) {
@@ -80,7 +102,8 @@ async function openFromTrigger(trigger) {
 
 async function openRuleById(ruleId) {
   const settings = await getSettings();
-  const rule = settings.rules.find((candidate) => candidate.id === ruleId) || settings.rules[0];
+  const enabledRules = settings.rules.filter(isRuleEnabled);
+  const rule = enabledRules.find((candidate) => candidate.id === ruleId) || enabledRules[0];
 
   if (!rule) {
     throw new Error("No route rule found.");
@@ -124,8 +147,132 @@ function createLegacyRule(result) {
     targetUrl,
     triggerType,
     mouseButton: DEFAULT_MOUSE_BUTTON,
-    triggerKey: normalizeTriggerKey(result[STORAGE_KEYS.triggerKey])
+    triggerKey: normalizeTriggerKey(result[STORAGE_KEYS.triggerKey]),
+    enabled: true
   });
+}
+
+function setupContextMenus() {
+  if (!chrome.contextMenus?.create) {
+    return;
+  }
+
+  chrome.contextMenus.removeAll(() => {
+    const removeError = chrome.runtime.lastError;
+
+    if (removeError) {
+      console.warn("[Quick Side Nav] Failed to reset context menus:", removeError);
+    }
+
+    chrome.contextMenus.create({
+      id: CONTEXT_MENU_ADD_PRESET_ID,
+      title: getLocalizedMessage("contextAddPagePreset", "Add this page to URL presets"),
+      contexts: ["page"],
+      documentUrlPatterns: ["http://*/*", "https://*/*"]
+    }, () => {
+      const createError = chrome.runtime.lastError;
+
+      if (createError) {
+        console.warn("[Quick Side Nav] Failed to create context menu:", createError);
+      }
+    });
+  });
+}
+
+async function addCurrentPageUrlPreset(info, tab) {
+  const targetUrl = normalizeValidUrl(info.pageUrl || tab?.url);
+
+  if (!targetUrl) {
+    throw new Error("No valid page URL found.");
+  }
+
+  const result = await chrome.storage.sync.get({
+    [STORAGE_KEYS.urlPresets]: null
+  });
+  const presets = getUrlPresetsFromStorage(result);
+  const existingPreset = presets.find((preset) => normalizeValidUrl(preset.targetUrl) === targetUrl);
+
+  if (existingPreset) {
+    return { added: false, preset: existingPreset };
+  }
+
+  const nextPresets = [
+    ...presets,
+    {
+      id: createPresetId(),
+      label: getPresetLabel(tab?.title, targetUrl),
+      targetUrl
+    }
+  ];
+
+  const storageSizeError = getStorageSizeError(STORAGE_KEYS.urlPresets, nextPresets);
+
+  if (storageSizeError) {
+    throw new Error(storageSizeError);
+  }
+
+  await chrome.storage.sync.set({
+    [STORAGE_KEYS.urlPresets]: nextPresets
+  });
+
+  return { added: true, preset: nextPresets[nextPresets.length - 1] };
+}
+
+function getUrlPresetsFromStorage(result) {
+  if (!Array.isArray(result[STORAGE_KEYS.urlPresets])) {
+    return [];
+  }
+
+  const seenIds = new Set();
+
+  return result[STORAGE_KEYS.urlPresets]
+    .map(normalizeStoredUrlPreset)
+    .filter((preset) => {
+      if (!preset || seenIds.has(preset.id)) {
+        return false;
+      }
+
+      seenIds.add(preset.id);
+      return true;
+    });
+}
+
+function normalizeStoredUrlPreset(preset) {
+  if (!preset || typeof preset !== "object") {
+    return null;
+  }
+
+  return {
+    id: typeof preset.id === "string" && preset.id ? preset.id : createPresetId(),
+    label: normalizePresetLabel(preset.label, preset.targetUrl),
+    targetUrl: normalizeUrl(preset.targetUrl)
+  };
+}
+
+function getPresetLabel(tabTitle, targetUrl) {
+  const title = typeof tabTitle === "string" ? tabTitle.trim() : "";
+  return normalizePresetLabel(title, targetUrl);
+}
+
+function normalizePresetLabel(value, targetUrl) {
+  const label = typeof value === "string" ? value.trim() : "";
+  return (label || getDefaultPresetLabel(targetUrl)).slice(0, MAX_PRESET_LABEL_LENGTH);
+}
+
+function getDefaultPresetLabel(targetUrl) {
+  try {
+    const url = new URL(targetUrl);
+    return url.hostname || getLocalizedMessage("defaultPresetLabel", "URL preset");
+  } catch {
+    return getLocalizedMessage("defaultPresetLabel", "URL preset");
+  }
+}
+
+function getStorageSizeError(key, value) {
+  const serialized = `${key}${JSON.stringify(value)}`;
+  const byteLength = new TextEncoder().encode(serialized).byteLength;
+
+  return byteLength > SYNC_ITEM_QUOTA_BYTES ? "Chrome sync storage item quota exceeded." : "";
 }
 
 async function openUrlInCurrentTab(url) {
@@ -142,7 +289,7 @@ async function openUrlInCurrentTab(url) {
 }
 
 function doesRuleMatchTrigger(rule, trigger) {
-  if (!trigger || rule.triggerType !== trigger.type) {
+  if (!isRuleEnabled(rule) || !trigger || rule.triggerType !== trigger.type) {
     return false;
   }
 
@@ -201,6 +348,7 @@ function normalizeRule(rule) {
 
   return {
     id: typeof rule.id === "string" && rule.id ? rule.id : createRuleId(),
+    enabled: isRuleEnabled(rule),
     targetUrl,
     triggerType,
     mouseButton: normalizeMouseButton(rule.mouseButton),
@@ -265,6 +413,14 @@ function createRuleId() {
   return `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function createPresetId() {
+  return `preset-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function isRuleEnabled(rule) {
+  return rule?.enabled !== false;
+}
+
 async function syncActionBadge() {
   try {
     const result = await chrome.storage.sync.get({
@@ -282,4 +438,18 @@ async function syncActionBadge() {
 
 function getErrorMessage(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+async function flashActionBadge(text, color) {
+  try {
+    await chrome.action.setBadgeBackgroundColor({ color });
+    await chrome.action.setBadgeText({ text });
+    setTimeout(syncActionBadge, 1400);
+  } catch (error) {
+    console.warn("[Quick Side Nav] Failed to flash badge:", error);
+  }
+}
+
+function getLocalizedMessage(name, fallback) {
+  return chrome.i18n?.getMessage?.(name) || fallback;
 }

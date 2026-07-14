@@ -138,6 +138,7 @@ function toPlain(value) {
 function makeRule(overrides = {}) {
   return {
     id: "rule-1",
+    enabled: true,
     targetUrl: "https://rule.example/",
     triggerType: "mouse",
     mouseButton: "3",
@@ -198,6 +199,7 @@ test("a successful save writes normalized settings and clears unsaved changes", 
     rules: [
       {
         id: "rule-1",
+        enabled: true,
         targetUrl: "https://preset.example/current",
         triggerType: "mouse",
         mouseButton: "3",

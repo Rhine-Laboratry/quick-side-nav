@@ -41,6 +41,7 @@ function toPlain(value) {
 function makeMouseRule(overrides = {}) {
   return {
     id: "rule-1",
+    enabled: true,
     targetUrl: "https://rule.example/",
     triggerType: "mouse",
     mouseButton: "3",
@@ -88,6 +89,7 @@ test("pre-preset rules migrate as direct URL rules", () => {
   assert.deepEqual(rules, [
     {
       id: "pre-preset-rule",
+      enabled: true,
       targetUrl: "https://legacy.example/path",
       triggerType: "mouse",
       mouseButton: "3",
@@ -198,6 +200,17 @@ test("overlapping mouse and identical keyboard triggers are rejected", () => {
     })
   ]);
   assert.equal(distinctMessage, "");
+});
+
+test("disabled duplicate triggers are ignored until re-enabled", () => {
+  const options = loadOptionsFunctions();
+
+  const message = options.findDuplicateTriggerMessage([
+    makeMouseRule({ id: "enabled-rule", mouseButton: "side" }),
+    makeMouseRule({ id: "disabled-rule", mouseButton: "3", enabled: false })
+  ]);
+
+  assert.equal(message, "");
 });
 
 test("URL validation accepts only explicit credential-free http(s) URLs of bounded length", () => {

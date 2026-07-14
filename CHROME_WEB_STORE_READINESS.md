@@ -1,13 +1,15 @@
 # Chrome Web Store readiness: Quick Side Nav
 
-Last checked: 2026-07-10
+Last checked: 2026-07-14
 
 ## Current extension behavior
 
-- Manifest V3 extension named `Quick Side Nav`, version `1.3.0`.
+- Manifest V3 extension named `Quick Side Nav`, version `1.4.0`.
+- The extension interface, manifest description, and accessibility labels automatically use Japanese when Chrome's UI language is Japanese and English otherwise.
 - Single user-facing purpose: map user-configured side mouse buttons or key combinations to user-configured `http://` / `https://` URLs, then navigate the current active tab.
-- Popup lets the user turn monitoring ON/OFF and open saved rules immediately.
-- Options page lets the user add, delete, and save multiple trigger rules and reusable URL presets. A rule can create a preset from its current URL, and rules linked to a preset update with that preset.
+- Popup lets the user turn monitoring ON/OFF, view rule-level enabled/disabled state, and open enabled saved rules immediately.
+- Options page lets the user add, delete, enable, disable, and save multiple trigger rules and reusable URL presets. A rule can create a preset from its current URL, and rules linked to a preset update with that preset.
+- The page context menu lets the user add the current `http://` or `https://` page URL to URL presets. Existing presets with the same normalized URL are reused instead of duplicated.
 - Rules, URL presets, and enabled state are stored in `chrome.storage.sync` under settings such as `isEnabled`, `rules`, `urlPresets`, `targetUrl`, `triggerType`, and `triggerKey`.
 - Default destination URL is `https://example.com/` until the user changes it.
 - Content script runs on top-level `http://*/*` and `https://*/*` pages at `document_start`.
@@ -17,6 +19,8 @@ Last checked: 2026-07-10
 - No analytics, remote code, account login, payment, or external server communication is implemented.
 
 ## Chrome Web Store listing copy
+
+The English localized listing, permission explanations, privacy copy, and reviewer instructions are ready in `store-listing/en-US.md`.
 
 ### Store name
 
@@ -39,6 +43,8 @@ Quick Side Nav は、通常のWebページ上でよく使う移動先URLをす�
 - ルールごとに移動先URLを保存
 - よく使う移動先URLをプリセットとして保存し、各ルールから選択
 - 入力済みのルールURLからプリセットを作成し、プリセットの変更を利用中ルールへ連動
+- ルールごとに有効/無効を切り替え
+- 通常ページの右クリックメニューから現在ページをURLプリセットへ追加
 - 拡張機能のポップアップから監視をON/OFF
 - 登録済みルールをポップアップから手動で開く
 
@@ -64,7 +70,11 @@ Productivity
 
 ### `storage`
 
-ユーザーが設定した監視ON/OFF状態、トリガールール、キー設定、移動先URL、URLプリセットを保存するために使用します。設定は `chrome.storage.sync` に保存され、拡張機能の動作設定以外には使用しません。
+ユーザーが設定した監視ON/OFF状態、ルールごとの有効/無効状態、トリガールール、キー設定、移動先URL、URLプリセットを保存するために使用します。設定は `chrome.storage.sync` に保存され、拡張機能の動作設定以外には使用しません。
+
+### `contextMenus`
+
+通常のWebページ上でユーザーが右クリックメニューから現在ページのURLをURLプリセットへ追加できるようにするために使用します。右クリックメニューは `http://` / `https://` ページに限定され、ユーザーがメニュー項目を選んだときだけそのページURLを保存します。
 
 ### `http://*/*` and `https://*/*` content script access
 
@@ -81,7 +91,7 @@ Productivity
 Use this as the starting point for the dashboard privacy fields and privacy policy page.
 
 ```text
-Quick Side Nav stores only the settings needed to provide its core feature: enabled/disabled state, trigger rules, keyboard shortcut metadata, mouse button selection, and user-entered destination URLs including URL presets. These settings are stored with Chrome storage so the extension can apply the user's rules.
+Quick Side Nav stores only the settings needed to provide its core feature: global enabled/disabled state, per-rule enabled/disabled state, trigger rules, keyboard shortcut metadata, mouse button selection, and user-entered or user-selected destination URLs including URL presets. These settings are stored with Chrome storage so the extension can apply the user's rules.
 
 Quick Side Nav does not collect, sell, transfer, or share personal information. It does not collect page content, form input, browsing history, authentication information, financial information, health information, location, or personal communications. It does not use analytics, advertising, tracking, or remote code.
 
@@ -116,21 +126,23 @@ No account, payment, or external service is required.
 5. Change the default rule destination to https://example.org/ and save.
 6. Return to https://example.com/ and reload the page so the content script is active.
 7. Press a mouse side button matching the saved rule. The current tab should navigate to the saved URL.
-8. To test a keyboard rule, add a new rule, choose key trigger, record a key combination such as Ctrl+Shift+G, set a valid https:// URL, and save.
-9. Reload https://example.com/ again, then press the saved key combination while focus is on the page body. The current tab should navigate to the saved URL.
-10. Confirm the same key combination does not trigger while typing inside a text field.
-11. Turn monitoring OFF in the popup and verify the saved trigger no longer navigates.
+8. Disable the rule in the options page, save, reload https://example.com/, and confirm the same side button no longer navigates. Re-enable the rule before continuing.
+9. Right-click on https://example.com/ and choose "Add this page to URL presets". Reopen the options page and confirm the page URL appears as a URL preset.
+10. To test a keyboard rule, add a new rule, choose key trigger, record a key combination such as Ctrl+Shift+G, set a valid https:// URL, and save.
+11. Reload https://example.com/ again, then press the saved key combination while focus is on the page body. The current tab should navigate to the saved URL.
+12. Confirm the same key combination does not trigger while typing inside a text field.
+13. Turn monitoring OFF in the popup and verify the saved trigger no longer navigates.
 
 Known expected limits: the extension does not run on chrome:// pages, the Chrome Web Store, other extension pages, the address bar, tab bar, or bookmark bar.
 ```
 
 ## Required dashboard assets checklist
 
-Current repo/package state: `manifest.json` declares `icons/icon-16.png`, `icons/icon-32.png`, `icons/icon-48.png`, and `icons/icon-128.png`. The PNG files are present in `icons/`. Store dashboard assets are present in `store-assets/`. `dist/quick-side-nav-v1.3.0.zip` was rebuilt and verified from the current source.
+Current repo/package state: `manifest.json` declares `icons/icon-16.png`, `icons/icon-32.png`, `icons/icon-48.png`, and `icons/icon-128.png`. The PNG files are present in `icons/`. Store dashboard assets are present in `store-assets/`.
 
 - [x] Create the declared icon PNG files, including the required 128x128 extension/store icon.
 - [x] At least one 1280x800 or 640x400 screenshot: `store-assets/screenshot-options-1280x800.png`.
-- [ ] Refresh the options screenshot after release to show the new preset controls. The existing screenshot still shows the rule workflow but predates the preset UI.
+- [x] English 1280x800 screenshot showing the current preset and rule UI: `store-assets/en-US/screenshot-options-1280x800.png`.
 - [x] 440x280 small promotional tile PNG or JPEG: `store-assets/promo-small-440x280.png`.
 - [x] Privacy policy draft: `PRIVACY.md`. Host this text at a public URL if the dashboard requires a privacy policy URL.
 - [ ] Optional 1400x560 marquee promotional tile for better listing presentation.
@@ -141,8 +153,8 @@ Current repo/package state: `manifest.json` declares `icons/icon-16.png`, `icons
 - [x] Load unpacked extension in Chrome from the repo folder.
 - [x] Confirm `manifest.json` is UTF-8 and valid JSON.
 - [x] Confirm all files referenced by `manifest.json`, especially `icons/icon-*.png`, exist.
-- [x] Run the options migration, preset, URL validation, sync quota, save success/failure, and runtime URL safety tests (18 passing tests).
-- [x] Rebuild `dist/quick-side-nav-v1.3.0.zip` from the current workspace and verify the packaged manifest and `options.js` against the source.
+- [x] Run the options migration, preset, URL validation, sync quota, save success/failure, runtime URL safety, and locale-catalog tests.
+- [x] Rebuild `dist/quick-side-nav-v1.4.0.zip` from the current workspace and verify the package, including English and Japanese locale catalogs.
 - [x] Confirm the package does not include `.git`, local notes, store dashboard assets, or build artifacts that are not needed by the extension.
 - [x] Confirm the Web Store listing copy matches the actual packaged version.
 - [x] Confirm the privacy declaration says only what the current code does.

@@ -132,6 +132,11 @@ button:focus-visible {
   background: #f8fafc;
 }
 
+.ruleItem.ruleDisabled {
+  background: #f1f5f9;
+  opacity: 0.76;
+}
+
 .ruleText {
   display: grid;
   gap: 3px;
@@ -140,6 +145,17 @@ button:focus-visible {
 
 .ruleTrigger {
   font-size: 12px;
+  font-weight: 700;
+}
+
+.ruleState {
+  width: fit-content;
+  padding: 1px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  color: #475569;
+  background: #ffffff;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -177,6 +193,10 @@ button:active {
 button:disabled {
   cursor: wait;
   opacity: 0.72;
+}
+
+.ruleOpenButton:disabled {
+  cursor: not-allowed;
 }
 
 button.secondary {

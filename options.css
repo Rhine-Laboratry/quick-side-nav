@@ -78,6 +78,28 @@ p {
   gap: 16px;
 }
 
+.ruleHeaderActions,
+.ruleEnabledToggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ruleEnabledToggle {
+  min-height: 34px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ruleEnabledToggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #2563eb;
+}
+
 .presetsList,
 .rulesList {
   display: grid;
@@ -92,6 +114,14 @@ p {
   border: 1px solid #d9e0ea;
   border-radius: 8px;
   background: #fbfcff;
+}
+
+.ruleCard.ruleDisabled {
+  background: #f8fafc;
+}
+
+.ruleCard.ruleDisabled > :not(.ruleHeader) {
+  opacity: 0.68;
 }
 
 .field,
@@ -366,6 +396,11 @@ button.inlineButton:not(:disabled):active {
   .presetsHeader,
   .rulesHeader,
   .ruleHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ruleHeaderActions {
     align-items: stretch;
     flex-direction: column;
   }
