@@ -36,6 +36,38 @@
           <div id="rulesList" class="rulesList"></div>
         </section>
 
+        <section id="twoTabSection" class="settingsSection twoTabSection" aria-labelledby="twoTabHeading">
+          <div class="ruleHeader">
+            <h2 id="twoTabHeading" data-i18n="twoTabHeading">Two-tab coordination</h2>
+            <label class="ruleEnabledToggle">
+              <input id="twoTabEnabled" type="checkbox">
+              <span data-i18n="twoTabEnabledLabel">Enable two-tab coordination</span>
+            </label>
+          </div>
+          <p class="hint" data-i18n="twoTabSettingsHint">Register different main and sub tabs in the popup. With Input monitoring on, F1 registers the main tab and F2 registers the sub tab. The trigger opens the sub URL, waits, then opens the main URL without changing focus.</p>
+          <div class="keySettings">
+            <span id="twoTabKeyLabel" class="label" data-i18n="twoTabTriggerKeyLabel">Run key</span>
+            <div class="keyCapture">
+              <output id="twoTabKeyDisplay" class="keyDisplay" aria-labelledby="twoTabKeyLabel">R</output>
+              <button id="twoTabCaptureKey" type="button" class="secondaryButton" data-i18n="recordKeyButton">Record key</button>
+              <button id="twoTabClearKey" type="button" class="secondaryButton" data-i18n="clearButton">Clear</button>
+            </div>
+            <p class="hint" data-i18n="twoTabKeyHint">F1 and F2 are reserved for registration while this feature is enabled. Input fields ignore the run key.</p>
+          </div>
+          <label class="field">
+            <span class="label" data-i18n="twoTabSubUrlLabel">Sub-tab URL (first)</span>
+            <input id="twoTabSubUrl" type="url" inputmode="url" autocomplete="url" spellcheck="false" maxlength="2048" placeholder="https://example.com/">
+          </label>
+          <label class="field">
+            <span class="label" data-i18n="twoTabMainUrlLabel">Main-tab URL (second)</span>
+            <input id="twoTabMainUrl" type="url" inputmode="url" autocomplete="url" spellcheck="false" maxlength="2048" placeholder="https://example.com/">
+          </label>
+          <label class="field">
+            <span class="label" data-i18n="twoTabDelayLabel">Wait between tabs (milliseconds)</span>
+            <input id="twoTabDelayMs" type="number" min="0" max="10000" step="1" value="300" inputmode="numeric">
+          </label>
+        </section>
+
         <div class="actions">
           <button id="saveButton" type="submit" data-i18n="saveButton">Save</button>
           <p id="statusMessage" class="status" role="status" aria-live="polite"></p>

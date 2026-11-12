@@ -5,17 +5,20 @@ const KEY_CAPTURE_TIMEOUT_MS = 15000;
 const MAX_URL_LENGTH = 2048;
 const MAX_PRESET_LABEL_LENGTH = 80;
 const SYNC_ITEM_QUOTA_BYTES = 8192;
+const TWO_TAB_CAPTURE_ID = "two-tab-settings";
 
 const STORAGE_KEYS = {
   targetUrl: "targetUrl",
   triggerType: "triggerType",
   triggerKey: "triggerKey",
   rules: "rules",
-  urlPresets: "urlPresets"
+  urlPresets: "urlPresets",
+  twoTabSettings: "twoTabSettings"
 };
 
 let rules = [];
 let urlPresets = [];
+let twoTabSettings = createDefaultTwoTabSettings();
 let isCapturingKey = false;
 let hasUnsavedChanges = false;
 let keyCaptureSession = null;
@@ -28,6 +31,7 @@ async function initOptions() {
     const savedSettings = await getSavedSettings();
     rules = savedSettings.rules;
     urlPresets = savedSettings.urlPresets;
+    twoTabSettings = savedSettings.twoTabSettings;
     renderPresets();
     renderRules();
   } catch (error) {
@@ -45,6 +49,9 @@ async function initOptions() {
       "error"
     );
   }
+
+  renderTwoTabSettings();
+  initTwoTabControls();
 
   document.getElementById("settingsForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -83,15 +90,151 @@ async function getSavedSettings() {
     [STORAGE_KEYS.rules]: null,
     [STORAGE_KEYS.targetUrl]: DEFAULT_URL,
     [STORAGE_KEYS.triggerType]: DEFAULT_TRIGGER_TYPE,
-    [STORAGE_KEYS.triggerKey]: null
+    [STORAGE_KEYS.triggerKey]: null,
+    [STORAGE_KEYS.twoTabSettings]: null
   });
 
   const savedPresets = getUrlPresetsFromStorage(result);
 
   return {
     urlPresets: savedPresets,
-    rules: getRulesFromStorage(result, savedPresets)
+    rules: getRulesFromStorage(result, savedPresets),
+    twoTabSettings: normalizeStoredTwoTabSettings(result[STORAGE_KEYS.twoTabSettings])
   };
+}
+
+function createDefaultTwoTabSettings() {
+  return {
+    enabled: false,
+    triggerKey: {
+      code: "KeyR", key: "r", displayName: "R",
+      ctrlKey: false, altKey: false, shiftKey: false, metaKey: false
+    },
+    subUrl: "",
+    mainUrl: "",
+    delayMs: 300
+  };
+}
+
+function normalizeStoredTwoTabSettings(value) {
+  const defaults = createDefaultTwoTabSettings();
+  if (!value || typeof value !== "object") return defaults;
+
+  return {
+    enabled: value.enabled === true,
+    triggerKey: Object.hasOwn(value, "triggerKey")
+      ? normalizeTwoTabTriggerKey(value.triggerKey) : defaults.triggerKey,
+    subUrl: normalizeUrl(value.subUrl),
+    mainUrl: normalizeUrl(value.mainUrl),
+    // Keep invalid stored values visible so users can correct them.
+    delayMs: Object.hasOwn(value, "delayMs") ? value.delayMs : defaults.delayMs
+  };
+}
+
+function normalizeTwoTabTriggerKey(value) {
+  const key = normalizeTriggerKey(value);
+  if (!key || !key.code.trim() || /^(Control|Alt|Shift|Meta)(Left|Right)?$/.test(key.code)
+      || ["Control", "Alt", "Shift", "Meta", "Unidentified"].includes(key.key)) return null;
+  return key;
+}
+
+function renderTwoTabSettings() {
+  const enabled = document.getElementById("twoTabEnabled");
+  if (!enabled) return;
+  enabled.checked = twoTabSettings.enabled;
+  document.getElementById("twoTabSubUrl").value = twoTabSettings.subUrl;
+  document.getElementById("twoTabMainUrl").value = twoTabSettings.mainUrl;
+  document.getElementById("twoTabDelayMs").value = twoTabSettings.delayMs;
+  document.getElementById("twoTabKeyDisplay").textContent = twoTabSettings.triggerKey?.displayName
+    || getLocalizedMessage("notSetLabel", undefined, "未設定");
+  const captureButton = document.getElementById("twoTabCaptureKey");
+  const capturing = keyCaptureSession?.ruleId === TWO_TAB_CAPTURE_ID;
+  captureButton.textContent = capturing
+    ? getLocalizedMessage("pressKeyButton", undefined, "キーを押してください")
+    : getLocalizedMessage("recordKeyButton", undefined, "キーを記録");
+  captureButton.disabled = isSaving || capturing;
+}
+
+function initTwoTabControls() {
+  document.getElementById("twoTabEnabled")?.addEventListener("change", (event) => {
+    twoTabSettings.enabled = event.target.checked;
+    markDirty();
+  });
+  for (const [id, field] of [["twoTabSubUrl", "subUrl"], ["twoTabMainUrl", "mainUrl"], ["twoTabDelayMs", "delayMs"]]) {
+    document.getElementById(id)?.addEventListener("input", (event) => {
+      twoTabSettings[field] = event.target.value;
+      event.target.removeAttribute("aria-invalid");
+      markDirty();
+    });
+  }
+  document.getElementById("twoTabCaptureKey")?.addEventListener("click", (event) => {
+    startKeyCapture(TWO_TAB_CAPTURE_ID, event.currentTarget);
+  });
+  document.getElementById("twoTabClearKey")?.addEventListener("click", () => {
+    if (isCapturingKey) clearKeyCaptureSession();
+    twoTabSettings.triggerKey = null;
+    renderRules();
+    renderTwoTabSettings();
+    document.getElementById("twoTabCaptureKey")?.focus();
+    markDirty(getLocalizedMessage("keyClearedStatus", undefined, "起動キーを解除しました。保存すると反映されます。"));
+  });
+}
+
+function isTwoTabRegistrationKey(key) {
+  return key && (key.code === "F1" || key.code === "F2")
+    && !key.ctrlKey && !key.altKey && !key.shiftKey && !key.metaKey;
+}
+
+function getTwoTabValidationError(settings, ruleList) {
+  for (const field of ["subUrl", "mainUrl"]) {
+    const value = normalizeUrl(settings[field]);
+    if ((settings.enabled || value) && !isValidUrl(value)) {
+      const subject = field === "subUrl"
+        ? getLocalizedMessage("twoTabSubSubject", undefined, "2タブ連携のサブタブ")
+        : getLocalizedMessage("twoTabMainSubject", undefined, "2タブ連携のメインタブ");
+      return { field, message: getUrlValidationMessage(value, subject) };
+    }
+  }
+  const delay = settings.delayMs;
+  if (!/^\d+$/.test(String(delay)) || !Number.isInteger(Number(delay)) || Number(delay) > 10000) {
+    return { field: "delayMs", message: getLocalizedMessage("twoTabDelayError", undefined, "待機時間は0〜10000ミリ秒の整数で指定してください。") };
+  }
+  if (!settings.enabled) return null;
+  const triggerKey = normalizeTwoTabTriggerKey(settings.triggerKey);
+  if (!triggerKey) {
+    return { field: "triggerKey", message: getLocalizedMessage("twoTabKeyRequiredError", undefined, "2タブ連携の起動キーを記録してください。") };
+  }
+  if (isTwoTabRegistrationKey(triggerKey)) {
+    return { field: "triggerKey", message: getLocalizedMessage("twoTabReservedKeyError", undefined, "F1・F2はタブ登録に使うため、別の起動キーを指定してください。") };
+  }
+  for (const [index, rule] of ruleList.entries()) {
+    if (!isRuleEnabled(rule) || rule.triggerType !== "key") continue;
+    const key = normalizeTriggerKey(rule.triggerKey);
+    if (key && (isTwoTabRegistrationKey(key) || getKeySignature(key) === getKeySignature(triggerKey))) {
+      return {
+        field: "triggerKey",
+        message: getLocalizedMessage("twoTabRuleConflictError", [index + 1], `ルール ${index + 1} が2タブ連携の起動キーまたは登録キー（F1・F2）と重複しています。ルールか2タブ連携の設定を変更してください。`)
+      };
+    }
+  }
+  return null;
+}
+
+function normalizeTwoTabSettings(settings) {
+  return {
+    enabled: settings.enabled === true,
+    triggerKey: normalizeTwoTabTriggerKey(settings.triggerKey),
+    subUrl: normalizeValidUrl(settings.subUrl),
+    mainUrl: normalizeValidUrl(settings.mainUrl),
+    delayMs: Number(settings.delayMs)
+  };
+}
+
+function focusTwoTabField(field) {
+  const ids = { subUrl: "twoTabSubUrl", mainUrl: "twoTabMainUrl", delayMs: "twoTabDelayMs", triggerKey: "twoTabCaptureKey" };
+  const element = document.getElementById(ids[field]);
+  element?.setAttribute("aria-invalid", "true");
+  element?.focus();
 }
 
 function getUrlPresetsFromStorage(result) {
@@ -947,6 +1090,20 @@ function captureKey(event, ruleId) {
 
   clearKeyCaptureSession();
 
+  if (ruleId === TWO_TAB_CAPTURE_ID) {
+    if (isModifierOnly(event) || !normalizeTwoTabTriggerKey(serializeKeyboardEvent(event))) {
+      renderTwoTabSettings();
+      focusTwoTabField("triggerKey");
+      showStatus(getLocalizedMessage("modifiersOnlyError", undefined, "Ctrl、Alt、Shiftだけは指定できません。文字キーやファンクションキーと組み合わせてください。"), "error");
+      return;
+    }
+    twoTabSettings.triggerKey = serializeKeyboardEvent(event);
+    renderTwoTabSettings();
+    document.getElementById("twoTabCaptureKey")?.focus();
+    markDirty(getShortcutWarning(twoTabSettings.triggerKey) || getLocalizedMessage("keyRecordedStatus", undefined, "起動キーを記録しました。保存すると反映されます。"));
+    return;
+  }
+
   const rule = rules.find((candidate) => candidate.id === ruleId);
 
   if (!rule) {
@@ -983,8 +1140,11 @@ function cancelKeyCapture(message, type) {
   const ruleId = keyCaptureSession?.ruleId;
   clearKeyCaptureSession();
   renderRules();
+  renderTwoTabSettings();
 
-  if (ruleId) {
+  if (ruleId === TWO_TAB_CAPTURE_ID) {
+    document.getElementById("twoTabCaptureKey")?.focus();
+  } else if (ruleId) {
     focusRuleControl(ruleId, "[data-action='capture-key']");
   }
 
@@ -1006,6 +1166,10 @@ function clearKeyCaptureSession() {
 async function saveSettings() {
   if (isSaving) {
     return;
+  }
+
+  if (isCapturingKey) {
+    cancelKeyCapture(getLocalizedMessage("captureCancelled", undefined, "キー記録をキャンセルしました。"), "pending");
   }
 
   const normalizedPresets = [];
@@ -1063,7 +1227,14 @@ async function saveSettings() {
     return;
   }
 
-  const storageSizeError = getStorageSizeError(normalizedPresets, normalizedRules);
+  const twoTabError = getTwoTabValidationError(twoTabSettings, normalizedRules);
+  if (twoTabError) {
+    showStatus(twoTabError.message, "error");
+    focusTwoTabField(twoTabError.field);
+    return;
+  }
+  const normalizedTwoTabSettings = normalizeTwoTabSettings(twoTabSettings);
+  const storageSizeError = getStorageSizeError(normalizedPresets, normalizedRules, normalizedTwoTabSettings);
 
   if (storageSizeError) {
     showStatus(storageSizeError, "error");
@@ -1077,6 +1248,7 @@ async function saveSettings() {
     await chrome.storage.sync.set({
       [STORAGE_KEYS.urlPresets]: normalizedPresets,
       [STORAGE_KEYS.rules]: normalizedRules,
+      [STORAGE_KEYS.twoTabSettings]: normalizedTwoTabSettings,
       [STORAGE_KEYS.targetUrl]: normalizedRules[0].targetUrl,
       [STORAGE_KEYS.triggerType]: normalizedRules[0].triggerType,
       [STORAGE_KEYS.triggerKey]: normalizedRules[0].triggerKey
@@ -1084,9 +1256,11 @@ async function saveSettings() {
 
     urlPresets = normalizedPresets;
     rules = normalizedRules;
+    twoTabSettings = normalizedTwoTabSettings;
     hasUnsavedChanges = false;
     renderPresets();
     renderRules();
+    renderTwoTabSettings();
     showStatus(getLocalizedMessage("savedStatus", undefined, "保存しました。"), "success");
   } catch (error) {
     showStatus(getSaveErrorMessage(error), "error");
@@ -1096,14 +1270,15 @@ async function saveSettings() {
   }
 }
 
-function getStorageSizeError(presetList, ruleList) {
+function getStorageSizeError(presetList, ruleList, twoTab = createDefaultTwoTabSettings()) {
   const items = [
     [
       STORAGE_KEYS.urlPresets,
       presetList,
       getLocalizedMessage("urlPresetsStorageLabel", undefined, "URLプリセット")
     ],
-    [STORAGE_KEYS.rules, ruleList, getLocalizedMessage("rulesStorageLabel", undefined, "起動ルール")]
+    [STORAGE_KEYS.rules, ruleList, getLocalizedMessage("rulesStorageLabel", undefined, "起動ルール")],
+    [STORAGE_KEYS.twoTabSettings, twoTab, getLocalizedMessage("twoTabStorageLabel", undefined, "2タブ連携")]
   ];
 
   for (const [key, value, label] of items) {

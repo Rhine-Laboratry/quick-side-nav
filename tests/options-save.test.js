@@ -209,7 +209,17 @@ test("a successful save writes normalized settings and clears unsaved changes", 
     ],
     targetUrl: "https://preset.example/current",
     triggerType: "mouse",
-    triggerKey: null
+    triggerKey: null,
+    twoTabSettings: {
+      enabled: false,
+      triggerKey: {
+        code: "KeyR", key: "r", displayName: "R",
+        ctrlKey: false, altKey: false, shiftKey: false, metaKey: false
+      },
+      subUrl: "",
+      mainUrl: "",
+      delayMs: 300
+    }
   });
 
   const state = toPlain(readInternalState(fixture.context));

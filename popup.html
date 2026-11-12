@@ -26,6 +26,34 @@
         <div id="rulesList" class="ruleList"></div>
       </section>
 
+      <section id="twoTabSection" class="twoTabSection" aria-labelledby="twoTabTitle" aria-busy="true">
+        <h2 id="twoTabTitle" class="label" data-i18n="twoTabTitle">Two-tab sequence</h2>
+        <div class="twoTabRow">
+          <div class="twoTabRole">
+            <span data-i18n="twoTabMainLabel">Main tab</span>
+            <span id="twoTabMainState" class="twoTabState">…</span>
+          </div>
+          <div class="twoTabButtons">
+            <button id="twoTabRegisterMain" class="secondary" type="button" data-i18n="twoTabRegisterButton" disabled>Register this tab</button>
+            <button id="twoTabClearMain" class="secondary" type="button" data-i18n="twoTabClearButton" disabled>Clear</button>
+          </div>
+        </div>
+        <div class="twoTabRow">
+          <div class="twoTabRole">
+            <span data-i18n="twoTabSubLabel">Sub tab</span>
+            <span id="twoTabSubState" class="twoTabState">…</span>
+          </div>
+          <div class="twoTabButtons">
+            <button id="twoTabRegisterSub" class="secondary" type="button" data-i18n="twoTabRegisterButton" disabled>Register this tab</button>
+            <button id="twoTabClearSub" class="secondary" type="button" data-i18n="twoTabClearButton" disabled>Clear</button>
+          </div>
+        </div>
+        <button id="twoTabRun" class="twoTabRun" type="button" data-i18n="twoTabRunButton" disabled>Run sequence</button>
+        <p class="twoTabHint" data-i18n="twoTabPopupSetupHint">Enable this feature and set both destination URLs in settings.</p>
+        <p class="twoTabHint" data-i18n="twoTabPopupShortcutHint">With input monitoring on: F1 registers main, F2 registers sub, and R runs the sequence by default on regular web pages.</p>
+        <p class="twoTabHint" data-i18n="twoTabPopupSessionHint">Registrations are cleared when the browser restarts.</p>
+      </section>
+
       <div class="actions">
         <button id="optionsButton" class="secondary" type="button" data-i18n="openSettingsButton">Open settings</button>
       </div>

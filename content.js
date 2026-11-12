@@ -4,6 +4,9 @@ const MESSAGE_TYPE = "open-configured-url";
 const DEFAULT_TRIGGER_TYPE = "mouse";
 const DEFAULT_MOUSE_BUTTON = "side";
 const MAX_URL_LENGTH = 2048;
+const DEFAULT_TWO_TAB_KEY = {
+  code: "KeyR", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false
+};
 const LISTENER_OPTIONS = {
   capture: true,
   passive: false
@@ -12,7 +15,8 @@ const LISTENER_OPTIONS = {
 let lastTriggeredAt = 0;
 let settings = {
   isEnabled: false,
-  rules: []
+  rules: [],
+  twoTabSettings: { enabled: false, triggerKey: DEFAULT_TWO_TAB_KEY }
 };
 
 for (const eventName of ["mousedown", "mouseup", "auxclick"]) {
@@ -28,6 +32,12 @@ loadSettings();
 chrome.storage.onChanged.addListener((_changes, areaName) => {
   if (areaName === "sync") {
     loadSettings();
+  }
+});
+
+chrome.runtime.onMessage?.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "two-tab-ping") {
+    sendResponse({ eligible: window.location.protocol === "http:" || window.location.protocol === "https:" });
   }
 });
 
@@ -92,12 +102,17 @@ async function loadSettings() {
     rules: null,
     targetUrl: "https://example.com/",
     triggerType: DEFAULT_TRIGGER_TYPE,
-    triggerKey: null
+    triggerKey: null,
+    twoTabSettings: null
   });
 
   settings = {
     isEnabled: Boolean(result.isEnabled),
-    rules: getRulesFromStorage(result)
+    rules: getRulesFromStorage(result),
+    twoTabSettings: {
+      enabled: result.twoTabSettings?.enabled === true,
+      triggerKey: normalizeTwoTabTriggerKey(result.twoTabSettings?.triggerKey)
+    }
   };
 }
 
@@ -137,17 +152,45 @@ function hasMatchingKeyRule(event) {
     return false;
   }
 
+  if (settings.twoTabSettings.enabled) {
+    const plainFunctionKey = (event.code === "F1" || event.code === "F2")
+      && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey;
+    if (plainFunctionKey || doesKeyMatch(settings.twoTabSettings.triggerKey, event)) {
+      return true;
+    }
+  }
+
   return settings.rules.some((rule) => {
     if (!isRuleEnabled(rule) || rule.triggerType !== "key" || !rule.triggerKey) {
       return false;
     }
 
-    return event.code === rule.triggerKey.code
-      && event.ctrlKey === rule.triggerKey.ctrlKey
-      && event.altKey === rule.triggerKey.altKey
-      && event.shiftKey === rule.triggerKey.shiftKey
-      && event.metaKey === rule.triggerKey.metaKey;
+    return doesKeyMatch(rule.triggerKey, event);
   });
+}
+
+function doesKeyMatch(triggerKey, event) {
+  return Boolean(triggerKey) && event.code === triggerKey.code
+    && event.ctrlKey === triggerKey.ctrlKey
+    && event.altKey === triggerKey.altKey
+    && event.shiftKey === triggerKey.shiftKey
+    && event.metaKey === triggerKey.metaKey;
+}
+
+function normalizeTwoTabTriggerKey(value) {
+  if (value === undefined) {
+    return DEFAULT_TWO_TAB_KEY;
+  }
+  const key = normalizeTriggerKey(value);
+  const registrationKey = key && (key.code === "F1" || key.code === "F2")
+    && !key.ctrlKey && !key.altKey && !key.shiftKey && !key.metaKey;
+  const keyValue = typeof value?.key === "string" ? value.key : key?.code;
+  if (!key || !key.code.trim() || registrationKey
+    || /^(Control|Alt|Shift|Meta)(Left|Right)?$/.test(key.code)
+    || ["Control", "Alt", "Shift", "Meta", "Unidentified"].includes(keyValue)) {
+    return null;
+  }
+  return key;
 }
 
 function isEditableTarget(target) {

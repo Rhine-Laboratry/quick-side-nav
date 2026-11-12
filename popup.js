@@ -12,23 +12,34 @@ const STORAGE_KEYS = {
 };
 
 const OPEN_NOW_MESSAGE = "open-configured-url-now";
+let twoTabStatus = null;
+let twoTabBusy = false;
+let twoTabStatusRequest = null;
+let twoTabRefreshTimer = null;
+let popupClosed = false;
 
 document.addEventListener("DOMContentLoaded", initPopup);
+window.addEventListener("unload", () => {
+  popupClosed = true;
+  clearTimeout(twoTabRefreshTimer);
+});
 
 async function initPopup() {
   const toggle = document.getElementById("enabledToggle");
   const optionsButton = document.getElementById("optionsButton");
 
-  const state = await getState();
-  toggle.checked = state.isEnabled;
-  updateToggleLabel(state.isEnabled);
-  renderRules(state.rules);
+  initializeTwoTabControls();
 
   toggle.addEventListener("change", async () => {
-    await chrome.storage.sync.set({
-      [STORAGE_KEYS.isEnabled]: toggle.checked
-    });
-    updateToggleLabel(toggle.checked);
+    try {
+      await chrome.storage.sync.set({
+        [STORAGE_KEYS.isEnabled]: toggle.checked
+      });
+      updateToggleLabel(toggle.checked);
+    } catch (error) {
+      toggle.checked = !toggle.checked;
+      setStatus(getErrorMessage(error));
+    }
   });
 
   document.getElementById("rulesList").addEventListener("click", async (event) => {
@@ -45,6 +56,131 @@ async function initPopup() {
     chrome.runtime.openOptionsPage();
     window.close();
   });
+
+  await Promise.all([
+    (async () => {
+      try {
+        const state = await getState();
+        toggle.checked = state.isEnabled;
+        updateToggleLabel(state.isEnabled);
+        renderRules(state.rules);
+      } catch (error) {
+        setStatus(getErrorMessage(error));
+      }
+    })(),
+    refreshTwoTabStatus()
+  ]);
+}
+
+function initializeTwoTabControls() {
+  for (const [suffix, role] of [["Main", "main"], ["Sub", "sub"]]) {
+    document.getElementById(`twoTabRegister${suffix}`).addEventListener("click", () =>
+      runTwoTabAction({ type: "two-tab-register", role }, "twoTabRegisteredSuccess", "タブを登録しました。"));
+    document.getElementById(`twoTabClear${suffix}`).addEventListener("click", () =>
+      runTwoTabAction({ type: "two-tab-clear", role }, "twoTabClearedSuccess", "登録を解除しました。"));
+  }
+
+  document.getElementById("twoTabRun").addEventListener("click", () =>
+    runTwoTabAction({ type: "two-tab-run" }, "twoTabRunSuccess", "連携を実行しました。"));
+  renderTwoTabStatus();
+}
+
+async function refreshTwoTabStatus(reportError = true) {
+  clearTimeout(twoTabRefreshTimer);
+  twoTabRefreshTimer = null;
+  if (twoTabStatusRequest) {
+    return twoTabStatusRequest;
+  }
+  twoTabStatusRequest = loadTwoTabStatus(reportError);
+  try {
+    return await twoTabStatusRequest;
+  } finally {
+    twoTabStatusRequest = null;
+    scheduleTwoTabStatusRefresh();
+  }
+}
+
+function scheduleTwoTabStatusRefresh() {
+  if (popupClosed || twoTabBusy || !twoTabStatus?.running || twoTabRefreshTimer !== null) {
+    return;
+  }
+  twoTabRefreshTimer = setTimeout(() => {
+    twoTabRefreshTimer = null;
+    return refreshTwoTabStatus();
+  }, 500);
+}
+
+async function loadTwoTabStatus(reportError) {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "two-tab-status" });
+    if (!response?.ok) {
+      throw new Error(response?.error || getLocalizedMessage("twoTabStatusError", undefined, "2タブ連携の状態を取得できませんでした。"));
+    }
+    twoTabStatus = response;
+    renderTwoTabStatus();
+    return "";
+  } catch (error) {
+    twoTabStatus = null;
+    renderTwoTabStatus();
+    const message = getErrorMessage(error);
+    if (reportError) {
+      setStatus(message);
+    }
+    return message;
+  }
+}
+
+function renderTwoTabStatus() {
+  const unavailable = twoTabBusy || Boolean(twoTabStatus?.running);
+  const registeredLabel = getLocalizedMessage("twoTabRegisteredLabel", undefined, "登録済み");
+  const unregisteredLabel = getLocalizedMessage("twoTabUnregisteredLabel", undefined, "未登録");
+
+  document.getElementById("twoTabSection").setAttribute("aria-busy", String(unavailable));
+  for (const [suffix, role] of [["Main", "main"], ["Sub", "sub"]]) {
+    const registered = Boolean(twoTabStatus?.[`${role}Registered`]);
+    document.getElementById(`twoTab${suffix}State`).textContent = twoTabStatus
+      ? (registered ? registeredLabel : unregisteredLabel)
+      : "—";
+    document.getElementById(`twoTabRegister${suffix}`).disabled = unavailable;
+    document.getElementById(`twoTabClear${suffix}`).disabled = unavailable || !registered;
+  }
+
+  document.getElementById("twoTabRun").disabled = unavailable || !(
+    twoTabStatus?.enabled && twoTabStatus.configured
+    && twoTabStatus.mainRegistered && twoTabStatus.subRegistered
+  );
+}
+
+async function runTwoTabAction(message, successKey, successFallback) {
+  if (twoTabBusy || twoTabStatus?.running) {
+    return;
+  }
+  twoTabBusy = true;
+  clearTimeout(twoTabRefreshTimer);
+  twoTabRefreshTimer = null;
+  renderTwoTabStatus();
+  setStatus("");
+  let resultMessage;
+  let failed = false;
+
+  try {
+    // The service worker resolves the active tab in the window that opened this popup.
+    // Keep this popup and that tab in place while registering or running the sequence.
+    const response = await chrome.runtime.sendMessage(message);
+    if (!response?.ok) {
+      throw new Error(response?.error || getLocalizedMessage("twoTabActionError", undefined, "2タブ連携の操作に失敗しました。"));
+    }
+    resultMessage = getLocalizedMessage(successKey, undefined, successFallback);
+  } catch (error) {
+    failed = true;
+    resultMessage = getErrorMessage(error);
+  } finally {
+    const statusError = await refreshTwoTabStatus(false);
+    twoTabBusy = false;
+    renderTwoTabStatus();
+    scheduleTwoTabStatusRefresh();
+    setStatus(failed ? resultMessage : statusError || resultMessage, failed || Boolean(statusError));
+  }
 }
 
 async function getState() {
@@ -152,8 +288,10 @@ function updateToggleLabel(isEnabled) {
     : getLocalizedMessage("monitoringOffHint", undefined, "登録済みの入力は反応しません。");
 }
 
-function setStatus(message) {
-  document.getElementById("statusMessage").textContent = message;
+function setStatus(message, isError = true) {
+  const status = document.getElementById("statusMessage");
+  status.textContent = message;
+  status.className = isError ? "status" : "status success";
 }
 
 function getTriggerLabel(rule) {
@@ -264,5 +402,5 @@ function normalizeTriggerKey(value) {
 }
 
 function getErrorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
+  return typeof error?.message === "string" ? error.message : String(error);
 }

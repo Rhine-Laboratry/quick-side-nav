@@ -6,12 +6,17 @@ const STORAGE_KEYS = {
   triggerType: "triggerType",
   triggerKey: "triggerKey",
   rules: "rules",
-  urlPresets: "urlPresets"
+  urlPresets: "urlPresets",
+  twoTabSettings: "twoTabSettings"
 };
 
 const MESSAGE_TYPES = {
   openFromTrigger: "open-configured-url",
-  openNow: "open-configured-url-now"
+  openNow: "open-configured-url-now",
+  twoTabRegister: "two-tab-register",
+  twoTabClear: "two-tab-clear",
+  twoTabStatus: "two-tab-status",
+  twoTabRun: "two-tab-run"
 };
 
 const DEFAULT_TRIGGER_TYPE = "mouse";
@@ -23,6 +28,14 @@ const MAX_URL_LENGTH = 2048;
 const MAX_PRESET_LABEL_LENGTH = 80;
 const SYNC_ITEM_QUOTA_BYTES = 8192;
 const CONTEXT_MENU_ADD_PRESET_ID = "quick-side-nav-add-page-preset";
+const TWO_TAB_TARGETS_KEY = "twoTabTargets";
+const DEFAULT_TWO_TAB_KEY = {
+  code: "KeyR", key: "r", displayName: "R",
+  ctrlKey: false, altKey: false, shiftKey: false, metaKey: false
+};
+let twoTabRun = null;
+let twoTabRevision = 0;
+let twoTabTargetMutation = Promise.resolve();
 
 chrome.runtime.onInstalled.addListener(() => {
   syncActionBadge();
@@ -51,18 +64,45 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "sync" && STORAGE_KEYS.isEnabled in changes) {
     syncActionBadge();
   }
+
+  if ((areaName === "sync" && (STORAGE_KEYS.twoTabSettings in changes
+    || (twoTabRun?.requireMonitoring && STORAGE_KEYS.isEnabled in changes)))
+    || (areaName === "session" && TWO_TAB_TARGETS_KEY in changes)) {
+    twoTabRevision += 1;
+  }
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+if (chrome.tabs.onRemoved?.addListener) {
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    mutateTwoTabTargets((targets) => ({
+      mainTabId: targets.mainTabId === tabId ? null : targets.mainTabId,
+      subTabId: targets.subTabId === tabId ? null : targets.subTabId
+    })).catch((error) => console.warn("[Quick Side Nav] Failed to clear closed tab:", error));
+  });
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== "string") {
     return false;
   }
 
   if (message.type === MESSAGE_TYPES.openFromTrigger) {
-    openFromTrigger(message.trigger)
+    openFromTrigger(message.trigger, sender)
       .then(() => sendResponse({ ok: true }))
       .catch((error) => {
         console.error("[Quick Side Nav] Failed to open URL:", error);
+        flashActionBadge("!", ERROR_BADGE_COLOR);
+        sendResponse({ ok: false, error: getErrorMessage(error) });
+      });
+    return true;
+  }
+
+  if ([MESSAGE_TYPES.twoTabRegister, MESSAGE_TYPES.twoTabClear,
+    MESSAGE_TYPES.twoTabStatus, MESSAGE_TYPES.twoTabRun].includes(message.type)) {
+    handleTwoTabMessage(message, sender)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => {
+        flashActionBadge("!", ERROR_BADGE_COLOR);
         sendResponse({ ok: false, error: getErrorMessage(error) });
       });
     return true;
@@ -84,11 +124,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 setupContextMenus();
 syncActionBadge();
 
-async function openFromTrigger(trigger) {
+async function openFromTrigger(trigger, sender) {
   const settings = await getSettings();
 
   if (!settings.isEnabled) {
     return;
+  }
+
+  const twoTabSettings = await getTwoTabSettings();
+  if (twoTabSettings.enabled && trigger?.type === "key") {
+    const role = getTwoTabRegistrationRole(trigger);
+    if (role) {
+      await registerTwoTabTarget(role, sender);
+      return;
+    }
+    if (doesKeyMatch(twoTabSettings.triggerKey, trigger)) {
+      await runTwoTabSequence({ requireMonitoring: true });
+      return;
+    }
   }
 
   const rule = settings.rules.find((candidate) => doesRuleMatchTrigger(candidate, trigger));
@@ -98,6 +151,197 @@ async function openFromTrigger(trigger) {
   }
 
   await openUrlInCurrentTab(rule.targetUrl);
+}
+
+function normalizeTwoTabSettings(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const delayMs = source.delayMs === undefined ? 300 : source.delayMs;
+  return {
+    enabled: source.enabled === true,
+    triggerKey: normalizeTwoTabTriggerKey(source.triggerKey),
+    subUrl: normalizeValidUrl(source.subUrl),
+    mainUrl: normalizeValidUrl(source.mainUrl),
+    delayMs: Number.isInteger(delayMs) && delayMs >= 0 && delayMs <= 10000 ? delayMs : null
+  };
+}
+
+async function getTwoTabSettings() {
+  const stored = await chrome.storage.sync.get({ [STORAGE_KEYS.twoTabSettings]: null });
+  return normalizeTwoTabSettings(stored[STORAGE_KEYS.twoTabSettings]);
+}
+
+function isTwoTabConfigured(settings) {
+  return Boolean(settings.triggerKey && settings.subUrl && settings.mainUrl && settings.delayMs !== null);
+}
+
+function normalizeTwoTabTriggerKey(value) {
+  if (value === undefined) {
+    return { ...DEFAULT_TWO_TAB_KEY };
+  }
+  const key = normalizeTriggerKey(value);
+  if (!key || !key.code.trim() || getTwoTabRegistrationRole(key)
+    || /^(Control|Alt|Shift|Meta)(Left|Right)?$/.test(key.code)
+    || ["Control", "Alt", "Shift", "Meta", "Unidentified"].includes(key.key)) {
+    return null;
+  }
+  return key;
+}
+
+function getTwoTabRegistrationRole(trigger) {
+  if (trigger.ctrlKey || trigger.altKey || trigger.shiftKey || trigger.metaKey) {
+    return null;
+  }
+  return trigger.code === "F1" ? "main" : trigger.code === "F2" ? "sub" : null;
+}
+
+function assertTwoTabRole(role) {
+  if (role !== "main" && role !== "sub") {
+    throw new Error(getLocalizedMessage("twoTabInvalidRoleError", "Choose the main or sub tab."));
+  }
+}
+
+async function readTwoTabTargets() {
+  if (!chrome.storage.session) {
+    throw new Error(getLocalizedMessage("twoTabSessionError", "Restart or update Chrome to use two-tab actions."));
+  }
+  const stored = await chrome.storage.session.get({ [TWO_TAB_TARGETS_KEY]: null });
+  const targets = stored[TWO_TAB_TARGETS_KEY] || {};
+  return {
+    mainTabId: Number.isInteger(targets.mainTabId) && targets.mainTabId >= 0 ? targets.mainTabId : null,
+    subTabId: Number.isInteger(targets.subTabId) && targets.subTabId >= 0 ? targets.subTabId : null
+  };
+}
+
+async function getTwoTabTargets() {
+  await twoTabTargetMutation;
+  return readTwoTabTargets();
+}
+
+function mutateTwoTabTargets(change) {
+  const mutation = twoTabTargetMutation.then(async () => {
+    const previous = await readTwoTabTargets();
+    const next = await change(previous);
+    if (previous.mainTabId !== next.mainTabId || previous.subTabId !== next.subTabId) {
+      twoTabRevision += 1;
+      await chrome.storage.session.set({ [TWO_TAB_TARGETS_KEY]: next });
+    }
+    return next;
+  });
+  twoTabTargetMutation = mutation.catch(() => {});
+  return mutation;
+}
+
+async function assertEligibleTwoTabTarget(tabId) {
+  if (!Number.isInteger(tabId)) {
+    throw new Error(getLocalizedMessage("twoTabMissingTargetsError", "Register both the main and sub tabs first."));
+  }
+  try {
+    await chrome.tabs.get(tabId);
+    // The content script confirms an eligible HTTP/S page without a tabs permission.
+    const response = await chrome.tabs.sendMessage(tabId, { type: "two-tab-ping" }, { frameId: 0 });
+    if (response?.eligible === true) {
+      return;
+    }
+  } catch {
+    // Closed, restricted, or not-yet-injected pages are all ineligible.
+  }
+  throw new Error(getLocalizedMessage("twoTabPageUnavailableError", "A registered tab is unavailable. Open a normal web page, reload it, and register it again."));
+}
+
+async function registerTwoTabTarget(role, sender) {
+  assertTwoTabRole(role);
+  const tab = Number.isInteger(sender?.tab?.id)
+    ? sender.tab
+    : (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0];
+  await mutateTwoTabTargets(async (targets) => {
+    await assertEligibleTwoTabTarget(tab?.id);
+    const otherRole = role === "main" ? "sub" : "main";
+    if (targets[`${otherRole}TabId`] === tab.id) {
+      throw new Error(getLocalizedMessage("twoTabDistinctTargetsError", "Register two different tabs as the main and sub tabs."));
+    }
+    return { ...targets, [`${role}TabId`]: tab.id };
+  });
+  flashActionBadge(role === "main" ? "M" : "S", ADDED_BADGE_COLOR);
+}
+
+async function handleTwoTabMessage(message, sender) {
+  if (message.type === MESSAGE_TYPES.twoTabRegister) {
+    await registerTwoTabTarget(message.role, sender);
+  } else if (message.type === MESSAGE_TYPES.twoTabClear) {
+    assertTwoTabRole(message.role);
+    await mutateTwoTabTargets((targets) => ({ ...targets, [`${message.role}TabId`]: null }));
+  } else if (message.type === MESSAGE_TYPES.twoTabRun) {
+    await runTwoTabSequence();
+  } else {
+    const settings = await getTwoTabSettings();
+    const targets = await getTwoTabTargets();
+    const registration = await Promise.allSettled([
+      assertEligibleTwoTabTarget(targets.mainTabId),
+      assertEligibleTwoTabTarget(targets.subTabId)
+    ]);
+    return {
+      enabled: settings.enabled,
+      configured: isTwoTabConfigured(settings),
+      running: twoTabRun !== null,
+      mainRegistered: registration[0].status === "fulfilled",
+      subRegistered: targets.mainTabId !== targets.subTabId && registration[1].status === "fulfilled"
+    };
+  }
+  return {};
+}
+
+async function assertTwoTabRunUnchanged(run) {
+  const stored = await chrome.storage.sync.get({
+    [STORAGE_KEYS.isEnabled]: false,
+    [STORAGE_KEYS.twoTabSettings]: null
+  });
+  const current = normalizeTwoTabSettings(stored[STORAGE_KEYS.twoTabSettings]);
+  const targets = await getTwoTabTargets();
+  if (run.revision !== twoTabRevision || !current.enabled
+    || JSON.stringify(current) !== run.settingsSignature
+    || targets.mainTabId !== run.targets.mainTabId || targets.subTabId !== run.targets.subTabId
+    || (run.requireMonitoring && !stored[STORAGE_KEYS.isEnabled])) {
+    throw new Error(getLocalizedMessage("twoTabCancelledError", "The two-tab action stopped because its settings or registered tabs changed."));
+  }
+}
+
+async function runTwoTabSequence({ requireMonitoring = false } = {}) {
+  if (twoTabRun) {
+    throw new Error(getLocalizedMessage("twoTabAlreadyRunningError", "A two-tab action is already running."));
+  }
+  const run = { requireMonitoring, revision: twoTabRevision };
+  twoTabRun = run;
+  try {
+    const settings = await getTwoTabSettings();
+    if (!settings.enabled) {
+      throw new Error(getLocalizedMessage("twoTabDisabledError", "Enable two-tab actions in settings first."));
+    }
+    if (!isTwoTabConfigured(settings)) {
+      throw new Error(getLocalizedMessage("twoTabInvalidSettingsError", "Set a valid run key, main and sub URLs, and a delay from 0 to 10,000 ms."));
+    }
+    const targets = await getTwoTabTargets();
+    if (targets.mainTabId === null || targets.subTabId === null) {
+      throw new Error(getLocalizedMessage("twoTabMissingTargetsError", "Register both the main and sub tabs first."));
+    }
+    if (targets.mainTabId === targets.subTabId) {
+      throw new Error(getLocalizedMessage("twoTabDistinctTargetsError", "Register two different tabs as the main and sub tabs."));
+    }
+    run.targets = targets;
+    run.settingsSignature = JSON.stringify(settings);
+    await Promise.all([
+      assertEligibleTwoTabTarget(targets.mainTabId),
+      assertEligibleTwoTabTarget(targets.subTabId)
+    ]);
+    await assertTwoTabRunUnchanged(run);
+    await chrome.tabs.update(targets.subTabId, { url: settings.subUrl });
+    await new Promise((resolve) => setTimeout(resolve, settings.delayMs));
+    await assertTwoTabRunUnchanged(run);
+    await assertEligibleTwoTabTarget(targets.mainTabId);
+    await assertTwoTabRunUnchanged(run);
+    await chrome.tabs.update(targets.mainTabId, { url: settings.mainUrl });
+  } finally {
+    twoTabRun = null;
+  }
 }
 
 async function openRuleById(ruleId) {
